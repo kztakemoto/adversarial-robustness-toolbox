@@ -22,7 +22,7 @@ tensorflow-addons~=0.11.0
 mxnet==1.6.0
 --find-links https://download.pytorch.org/whl/torch_stable.html
 torch==1.6.0
-torchaudio==0.6.0
+torchaudio==0.7.2
 torchvision==0.7.0
 catboost==0.24.1
 GPy==1.9.9
