@@ -171,6 +171,8 @@ class FourierAttack(EvasionAttack):
         # generate adversarial examples
         x_adv = x + noise
 
+        self.noise = noise
+
         return x_adv
 
 
