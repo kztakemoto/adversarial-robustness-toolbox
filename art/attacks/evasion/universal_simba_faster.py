@@ -22,6 +22,7 @@ This module implements the black-box universal attack `simba`.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
+from typing import Union, TYPE_CHECKING
 
 import numpy as np
 from scipy.fftpack import dct, idct
@@ -29,12 +30,12 @@ from scipy.fftpack import dct, idct
 from art.config import ART_NUMPY_DTYPE
 from art.attacks.attack import EvasionAttack
 from art.estimators.estimator import BaseEstimator
-from art.estimators.classification.classifier import (
-    ClassGradientsMixin,
-    ClassifierGradients,
-)
+from art.estimators.classification.classifier import ClassifierMixin
 from art.utils import compute_success
 from art.utils import projection
+
+if TYPE_CHECKING:
+    from art.utils import CLASSIFIER_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +55,11 @@ class Universal_SimBA_faster(EvasionAttack):
         'norm',
         'batch_size',
     ]
-
-    _estimator_requirements = (BaseEstimator, ClassGradientsMixin)
+    _estimator_requirements = (BaseEstimator, ClassifierMixin)
 
     def __init__(
         self,
-        classifier: ClassifierGradients,
+        classifier: "CLASSIFIER_TYPE",
         attack: str = 'dct',
         max_iter: int = 3000,
         epsilon: float = 0.2,
@@ -70,7 +70,7 @@ class Universal_SimBA_faster(EvasionAttack):
         targeted: bool = False,
         delta: float = 0.01,
         eps: float = 10.0,
-        norm: int = 2,
+        norm: Union[int, float, str] = np.inf,
         batch_size: int = 1
     ):
         """

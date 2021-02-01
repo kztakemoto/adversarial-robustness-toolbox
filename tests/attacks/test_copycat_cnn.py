@@ -47,7 +47,7 @@ from tests.utils import (
 
 logger = logging.getLogger(__name__)
 
-NB_EPOCHS = 10
+NB_EPOCHS = 20
 NB_STOLEN = 1000
 
 
@@ -260,7 +260,7 @@ class TestCopycatCNNVectors(TestBase):
         optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
         train = optimizer.minimize(loss)
 
-        # Tensorflow session and initialization
+        # TensorFlow session and initialization
         sess.run(tf.global_variables_initializer())
 
         # Train the classifier
@@ -336,7 +336,7 @@ class TestCopycatCNNVectors(TestBase):
 
     def test_pytorch_iris(self):
         """
-        Third test for Pytorch.
+        Third test for PyTorch.
         :return:
         """
         # Build PyTorchClassifier

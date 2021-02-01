@@ -23,19 +23,19 @@ This module implements the single Fourier attack.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from typing import Optional, Union
+from typing import Optional, Union, TYPE_CHECKING
 
 import numpy as np
 from scipy.fft import ifftn
 
 from art.attacks.attack import EvasionAttack
 from art.estimators.estimator import BaseEstimator
-from art.estimators.classification.classifier import (
-    ClassGradientsMixin,
-    ClassifierGradients,
-)
+from art.estimators.classification.classifier import ClassifierMixin
 from art.config import ART_NUMPY_DTYPE
 from art.utils import projection
+
+if TYPE_CHECKING:
+    from art.utils import CLASSIFIER_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +48,11 @@ class FourierAttack(EvasionAttack):
         'norm',
         'batch_size',
     ]
-
-    _estimator_requirements = (BaseEstimator, ClassGradientsMixin)
+    _estimator_requirements = (BaseEstimator, ClassifierMixin)
 
     def __init__(
         self,
-        classifier: ClassifierGradients,
+        classifier: "CLASSIFIER_TYPE",
         epsilon: float = 20.0,
         block_size: int = 4,
         eps: float = 0.1,

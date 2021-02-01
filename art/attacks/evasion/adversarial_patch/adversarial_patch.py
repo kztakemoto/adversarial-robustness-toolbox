@@ -17,34 +17,34 @@
 # SOFTWARE.
 """
 This module implements the adversarial patch attack `AdversarialPatch`. This attack generates an adversarial patch that
-can be printed into the physical world with a common printer. The patch can be used to fool image classifiers.
+can be printed into the physical world with a common printer. The patch can be used to fool image and video classifiers.
 
 | Paper link: https://arxiv.org/abs/1712.09665
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, TYPE_CHECKING
 
 import numpy as np
 
 from art.attacks.evasion.adversarial_patch.adversarial_patch_numpy import AdversarialPatchNumpy
 from art.attacks.evasion.adversarial_patch.adversarial_patch_tensorflow import AdversarialPatchTensorFlowV2
 from art.estimators.estimator import BaseEstimator, NeuralNetworkMixin
-from art.estimators.classification.classifier import (
-    ClassifierMixin,
-    ClassifierNeuralNetwork,
-    ClassifierGradients,
-)
+from art.estimators.classification.classifier import ClassifierMixin
+
 from art.estimators.classification import TensorFlowV2Classifier
 from art.attacks.attack import EvasionAttack
+
+if TYPE_CHECKING:
+    from art.utils import CLASSIFIER_NEURALNETWORK_TYPE
 
 logger = logging.getLogger(__name__)
 
 
 class AdversarialPatch(EvasionAttack):
     """
-    Implementation of the adversarial patch attack.
+    Implementation of the adversarial patch attack for square and rectangular images and videos.
 
     | Paper link: https://arxiv.org/abs/1712.09665
     """
@@ -56,13 +56,14 @@ class AdversarialPatch(EvasionAttack):
         "learning_rate",
         "max_iter",
         "batch_size",
+        "verbose",
     ]
 
     _estimator_requirements = (BaseEstimator, NeuralNetworkMixin, ClassifierMixin)
 
     def __init__(
         self,
-        classifier: Union[ClassifierNeuralNetwork, ClassifierGradients],
+        classifier: "CLASSIFIER_NEURALNETWORK_TYPE",
         rotation_max: float = 22.5,
         scale_min: float = 0.1,
         scale_max: float = 1.0,
@@ -70,6 +71,7 @@ class AdversarialPatch(EvasionAttack):
         max_iter: int = 500,
         batch_size: int = 16,
         patch_shape: Optional[Tuple[int, int, int]] = None,
+        verbose: bool = True,
     ):
         """
         Create an instance of the :class:`.AdversarialPatch`.
@@ -86,9 +88,10 @@ class AdversarialPatch(EvasionAttack):
         :param batch_size: The size of the training batch.
         :param patch_shape: The shape of the adversarial patch as a tuple of shape (width, height, nb_channels).
                             Currently only supported for `TensorFlowV2Classifier`. For classifiers of other frameworks
-                            the `patch_shape` is set to the shape of the image samples.
+                            the `patch_shape` is set to the shape of the input samples.
+        :param verbose: Show progress bars.
         """
-        super(AdversarialPatch, self).__init__(estimator=classifier)
+        super().__init__(estimator=classifier)
         if self.estimator.clip_values is None:
             raise ValueError("Adversarial Patch attack requires a classifier with clip_values.")
 
@@ -103,6 +106,7 @@ class AdversarialPatch(EvasionAttack):
                 max_iter=max_iter,
                 batch_size=batch_size,
                 patch_shape=patch_shape,
+                verbose=verbose,
             )
         else:
             self._attack = AdversarialPatchNumpy(
@@ -113,16 +117,21 @@ class AdversarialPatch(EvasionAttack):
                 learning_rate=learning_rate,
                 max_iter=max_iter,
                 batch_size=batch_size,
+                verbose=verbose,
             )
         self._check_params()
 
-    def generate(self, x: np.ndarray, y: Optional[np.ndarray] = None, **kwargs) -> np.ndarray:
+    def generate(self, x: np.ndarray, y: Optional[np.ndarray] = None, **kwargs) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Generate adversarial samples and return them in an array.
+        Generate an adversarial patch and return the patch and its mask in arrays.
 
-        :param x: An array with the original inputs. `x` is expected to have spatial dimensions.
-        :param y: An array with the original labels to be predicted.
-        :return: An array holding the adversarial patch.
+        :param x: An array with the original input images of shape NHWC or NCHW or input videos of shape NFHWC or NFCHW.
+        :param y: An array with the original true labels.
+        :param mask: An boolean array of shape equal to the shape of a single samples (1, H, W) or the shape of `x`
+                     (N, H, W) without their channel dimensions. Any features for which the mask is True can be the
+                     center location of the patch during sampling.
+        :type mask: `np.ndarray`
+        :return: An array with adversarial patch and an array of the patch mask.
         """
         logger.info("Creating adversarial patch.")
 
@@ -139,7 +148,7 @@ class AdversarialPatch(EvasionAttack):
 
     def apply_patch(self, x: np.ndarray, scale: float, patch_external: Optional[np.ndarray] = None) -> np.ndarray:
         """
-        A function to apply the learned adversarial patch to images.
+        A function to apply the learned adversarial patch to images or videos.
 
         :param x: Instances to apply randomly transformed patch.
         :param scale: Scale of the applied patch in relation to the classifier input shape.
@@ -149,6 +158,7 @@ class AdversarialPatch(EvasionAttack):
         return self._attack.apply_patch(x, scale, patch_external=patch_external)
 
     def set_params(self, **kwargs) -> None:
+        super().set_params(**kwargs)
         self._attack.set_params(**kwargs)
 
     def _check_params(self) -> None:
@@ -183,3 +193,6 @@ class AdversarialPatch(EvasionAttack):
             raise ValueError("The batch size must be of type int.")
         if not self._attack.batch_size > 0:
             raise ValueError("The batch size must be greater than 0.")
+
+        if not isinstance(self._attack.verbose, bool):
+            raise ValueError("The argument `verbose` has to be of type bool.")

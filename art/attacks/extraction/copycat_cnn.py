@@ -23,16 +23,18 @@ This module implements the copycat cnn attack `CopycatCNN`.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 
 from art.config import ART_NUMPY_DTYPE
 from art.attacks.attack import ExtractionAttack
 from art.estimators.estimator import BaseEstimator
-from art.estimators.classification.classifier import ClassifierMixin, Classifier
+from art.estimators.classification.classifier import ClassifierMixin
 from art.utils import to_categorical
 
+if TYPE_CHECKING:
+    from art.utils import CLASSIFIER_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +51,18 @@ class CopycatCNN(ExtractionAttack):
         "batch_size_query",
         "nb_epochs",
         "nb_stolen",
+        "use_probability",
     ]
     _estimator_requirements = (BaseEstimator, ClassifierMixin)
 
     def __init__(
         self,
-        classifier: Classifier,
+        classifier: "CLASSIFIER_TYPE",
         batch_size_fit: int = 1,
         batch_size_query: int = 1,
         nb_epochs: int = 10,
         nb_stolen: int = 1,
+        use_probability: bool = False,
     ) -> None:
         """
         Create a Copycat CNN attack instance.
@@ -69,15 +73,16 @@ class CopycatCNN(ExtractionAttack):
         :param nb_epochs: Number of epochs to use for training.
         :param nb_stolen: Number of queries submitted to the victim classifier to steal it.
         """
-        super(CopycatCNN, self).__init__(estimator=classifier)
+        super().__init__(estimator=classifier)
 
         self.batch_size_fit = batch_size_fit
         self.batch_size_query = batch_size_query
         self.nb_epochs = nb_epochs
         self.nb_stolen = nb_stolen
+        self.use_probability = use_probability
         self._check_params()
 
-    def extract(self, x: np.ndarray, y: Optional[np.ndarray] = None, **kwargs) -> Classifier:
+    def extract(self, x: np.ndarray, y: Optional[np.ndarray] = None, **kwargs) -> "CLASSIFIER_TYPE":
         """
         Extract a thieved classifier.
 
@@ -137,8 +142,9 @@ class CopycatCNN(ExtractionAttack):
         :return: Target values (class labels) one-hot-encoded of shape (nb_samples, nb_classes).
         """
         labels = self.estimator.predict(x=x, batch_size=self.batch_size_query)
-        labels = np.argmax(labels, axis=1)
-        labels = to_categorical(labels=labels, nb_classes=self.estimator.nb_classes)
+        if not self.use_probability:
+            labels = np.argmax(labels, axis=1)
+            labels = to_categorical(labels=labels, nb_classes=self.estimator.nb_classes)
 
         return labels
 
@@ -154,3 +160,6 @@ class CopycatCNN(ExtractionAttack):
 
         if not isinstance(self.nb_stolen, (int, np.int)) or self.nb_stolen <= 0:
             raise ValueError("The number of queries submitted to the victim classifier must be a positive integer.")
+
+        if not isinstance(self.use_probability, bool):
+            raise ValueError("The argument `use_probability` has to be of type bool.")

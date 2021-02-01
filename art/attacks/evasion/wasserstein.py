@@ -23,19 +23,24 @@ This module implements ``Wasserstein Adversarial Examples via Projected Sinkhorn
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import numpy as np
 from scipy.special import lambertw
-from tqdm import trange
+from tqdm.auto import trange
 
 from art.config import ART_NUMPY_DTYPE
-from art.estimators.estimator import BaseEstimator, LossGradientsMixin, NeuralNetworkMixin
+from art.estimators.estimator import BaseEstimator, LossGradientsMixin
 from art.estimators.classification.classifier import ClassifierMixin
 from art.attacks.attack import EvasionAttack
 from art.utils import compute_success, get_labels_np_array, check_and_transform_label_format
 
+if TYPE_CHECKING:
+    from art.utils import CLASSIFIER_LOSS_GRADIENTS_TYPE
+
 logger = logging.getLogger(__name__)
+
+EPS_LOG = 10 ** -10
 
 
 class Wasserstein(EvasionAttack):
@@ -60,13 +65,14 @@ class Wasserstein(EvasionAttack):
         "conjugate_sinkhorn_max_iter",
         "projected_sinkhorn_max_iter",
         "batch_size",
+        "verbose",
     ]
 
-    _estimator_requirements = (BaseEstimator, LossGradientsMixin, NeuralNetworkMixin, ClassifierMixin)
+    _estimator_requirements = (BaseEstimator, LossGradientsMixin, ClassifierMixin)
 
     def __init__(
         self,
-        estimator: BaseEstimator,
+        estimator: "CLASSIFIER_LOSS_GRADIENTS_TYPE",
         targeted: bool = False,
         regularization: float = 3000.0,
         p: int = 2,
@@ -81,6 +87,7 @@ class Wasserstein(EvasionAttack):
         conjugate_sinkhorn_max_iter: int = 400,
         projected_sinkhorn_max_iter: int = 400,
         batch_size: int = 1,
+        verbose: bool = True,
     ):
         """
         Create a Wasserstein attack instance.
@@ -100,10 +107,11 @@ class Wasserstein(EvasionAttack):
         :param conjugate_sinkhorn_max_iter: The maximum number of iterations for the conjugate sinkhorn optimizer.
         :param projected_sinkhorn_max_iter: The maximum number of iterations for the projected sinkhorn optimizer.
         :param batch_size: Size of batches.
+        :param verbose: Show progress bars.
         """
         super().__init__(estimator=estimator)
 
-        self.targeted = targeted
+        self._targeted = targeted
         self.regularization = regularization
         self.p = p
         self.kernel_size = kernel_size
@@ -117,6 +125,7 @@ class Wasserstein(EvasionAttack):
         self.conjugate_sinkhorn_max_iter = conjugate_sinkhorn_max_iter
         self.projected_sinkhorn_max_iter = projected_sinkhorn_max_iter
         self.batch_size = batch_size
+        self.verbose = verbose
         self._check_params()
 
     def generate(self, x: np.ndarray, y: Optional[np.ndarray] = None, **kwargs) -> np.ndarray:
@@ -152,7 +161,7 @@ class Wasserstein(EvasionAttack):
 
         # Compute perturbation with implicit batching
         nb_batches = int(np.ceil(x.shape[0] / float(self.batch_size)))
-        for batch_id in trange(nb_batches, desc="Wasserstein"):
+        for batch_id in trange(nb_batches, desc="Wasserstein", disable=not self.verbose):
             logger.debug("Processing batch %i out of %i", batch_id, nb_batches)
 
             batch_index_1, batch_index_2 = batch_id * self.batch_size, (batch_id + 1) * self.batch_size
@@ -370,6 +379,7 @@ class Wasserstein(EvasionAttack):
         exp_alpha = np.exp(-alpha)
 
         beta = -self.regularization * grad
+        beta = beta.astype(np.float64)
         exp_beta = np.exp(-beta)
 
         # Check for overflow
@@ -392,6 +402,7 @@ class Wasserstein(EvasionAttack):
 
         for _ in range(self.conjugate_sinkhorn_max_iter):
             # Block coordinate descent iterates
+            x[x == 0.0] = EPS_LOG  # Prevent divide by zero in np.log
             alpha[I_nonzero_] = (np.log(self._local_transport(K, exp_beta, self.kernel_size)) - np.log(x))[I_nonzero_]
             exp_alpha = np.exp(-alpha)
 
@@ -467,6 +478,7 @@ class Wasserstein(EvasionAttack):
 
         for _ in range(self.projected_sinkhorn_max_iter):
             # Block coordinate descent iterates
+            x_init[x_init == 0.0] = EPS_LOG  # Prevent divide by zero in np.log
             alpha = np.log(self._local_transport(K, exp_beta, self.kernel_size)) - np.log(x_init)
             exp_alpha = np.exp(-alpha)
 
@@ -530,7 +542,10 @@ class Wasserstein(EvasionAttack):
 
         for i in range(kernel_size):
             for j in range(kernel_size):
-                cost_matrix[i, j] = (abs(i - center) ** 2 + abs(j - center) ** 2) ** (p / 2)
+                # The code of the paper of this attack (https://arxiv.org/abs/1902.07906) implements the cost as:
+                # cost_matrix[i, j] = (abs(i - center) ** 2 + abs(j - center) ** 2) ** (p / 2)
+                # which only can reproduce L2-norm for p=1 correctly
+                cost_matrix[i, j] = (abs(i - center) ** p + abs(j - center) ** p) ** (1 / p)
 
         return cost_matrix
 
@@ -567,7 +582,7 @@ class Wasserstein(EvasionAttack):
         # Do padding
         shape = tuple(np.array(x.shape[2:]) + padding * 2)
         x_pad = np.zeros(x.shape[:2] + shape)
-        x_pad[:, :, padding : (shape[0] - padding), padding : (shape[0] - padding)] = x
+        x_pad[:, :, padding : (shape[0] - padding), padding : (shape[1] - padding)] = x
 
         # Do unfolding
         res_dim_0 = x.shape[0]
@@ -614,9 +629,7 @@ class Wasserstein(EvasionAttack):
 
         result = np.matmul(unfold_x, tmp_K)
         result = np.squeeze(result, -1)
-
-        size = int(np.sqrt(result.shape[-1]))
-        result = result.reshape(*result.shape[:-1], size, size)
+        result = result.reshape(*result.shape[:-1], x.shape[-2], x.shape[-1])
 
         # Swap channels for final result
         if not self.estimator.channels_first:
@@ -634,7 +647,7 @@ class Wasserstein(EvasionAttack):
         exp_beta: np.ndarray,
         psi: np.ndarray,
         K: np.ndarray,
-        eps: float,
+        eps: np.ndarray,
     ) -> np.ndarray:
         """
         Function to evaluate the objective of the projected sinkhorn optimizer.
@@ -725,8 +738,10 @@ class Wasserstein(EvasionAttack):
         if self.eps_step <= 0:
             raise ValueError("The perturbation step-size `eps_step` has to be positive.")
 
-        if self.eps_step > self.eps:
-            raise ValueError("The iteration step `eps_step` has to be smaller than the total attack `eps`.")
+        if self.norm == "inf" and self.eps_step > self.eps:
+            raise ValueError(
+                "The iteration step `eps_step` has to be smaller than or equal to the total attack budget `eps`."
+            )
 
         if self.eps_iter <= 0:
             raise ValueError("The number of epsilon iterations `eps_iter` has to be a positive integer.")
@@ -745,3 +760,6 @@ class Wasserstein(EvasionAttack):
 
         if self.batch_size <= 0:
             raise ValueError("The batch size `batch_size` has to be positive.")
+
+        if not isinstance(self.verbose, bool):
+            raise ValueError("The argument `verbose` has to be of type bool.")
