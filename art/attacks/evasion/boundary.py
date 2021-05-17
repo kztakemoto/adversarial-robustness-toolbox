@@ -427,7 +427,7 @@ class BoundaryAttack(EvasionAttack):
                     break
             else:
                 logger.warning("Failed to draw a random image that is adversarial, attack failed.")
-            print(initial_sample)
+        print(initial_sample)
         return initial_sample
 
     @staticmethod
