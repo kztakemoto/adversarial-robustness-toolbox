@@ -385,7 +385,6 @@ class BoundaryAttack(EvasionAttack):
         if self.targeted:
             # Attack satisfied
             if y == y_p:
-                print('out!!!!')
                 return None
 
             # Attack unsatisfied yet and the initial image satisfied
@@ -428,7 +427,7 @@ class BoundaryAttack(EvasionAttack):
                     break
             else:
                 logger.warning("Failed to draw a random image that is adversarial, attack failed.")
-
+            print(initial_sample)
         return initial_sample
 
     @staticmethod
