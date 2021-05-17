@@ -161,27 +161,27 @@ class TestElasticNet(TestBase):
         x_test_adv = ead.generate(self.x_test_mnist, **params)
         expected_x_test_adv = np.asarray(
             [
-                0.22866514,
-                0.21826893,
-                0.22902338,
-                0.06268515,
+                0.22766514,
+                0.21726893,
+                0.22802338,
+                0.06168516,
                 0.0,
                 0.0,
-                0.04822975,
-                0.0,
-                0.0,
-                0.0,
-                0.05555382,
+                0.04722975,
                 0.0,
                 0.0,
                 0.0,
-                0.38986346,
-                0.10653087,
-                0.32385707,
-                0.98043066,
-                0.75790393,
-                0.16486718,
-                0.16069527,
+                0.05455382,
+                0.0,
+                0.0,
+                0.0,
+                0.38886347,
+                0.10553087,
+                0.32285708,
+                0.9794307,
+                0.7589039,
+                0.16586718,
+                0.15969527,
                 0.0,
                 0.0,
                 0.0,
@@ -416,7 +416,7 @@ class TestElasticNet(TestBase):
         classifier = get_tabular_classifier_kr()
         attack = ElasticNet(classifier, targeted=False, max_iter=10)
         x_test_adv = attack.generate(self.x_test_iris)
-        expected_x_test_adv = np.asarray([0.85931635, 0.44633555, 0.65658355, 0.23840423])
+        expected_x_test_adv = np.asarray([0.860373, 0.455002, 0.654925, 0.240258])
         np.testing.assert_array_almost_equal(x_test_adv[0, :], expected_x_test_adv, decimal=6)
         self.assertLessEqual(np.amax(x_test_adv), 1.0)
         self.assertGreaterEqual(np.amin(x_test_adv), 0.0)
@@ -464,7 +464,7 @@ class TestElasticNet(TestBase):
                     1,
                     1,
                     2,
-                    0,
+                    2,
                     2,
                     2,
                     1,
@@ -475,6 +475,8 @@ class TestElasticNet(TestBase):
         )
         accuracy = 1.0 - np.sum(predictions_adv == np.argmax(self.y_test_iris, axis=1)) / self.y_test_iris.shape[0]
         logger.info("EAD success rate on Iris: %.2f%%", (accuracy * 100))
+
+        k.clear_session()
 
     def test_9_keras_iris_unbounded(self):
         classifier = get_tabular_classifier_kr()
@@ -483,7 +485,7 @@ class TestElasticNet(TestBase):
         classifier = KerasClassifier(model=classifier._model, use_logits=False, channels_first=True)
         attack = ElasticNet(classifier, targeted=False, max_iter=10)
         x_test_adv = attack.generate(self.x_test_iris)
-        expected_x_test_adv = np.asarray([0.85931635, 0.44633555, 0.65658355, 0.23840423])
+        expected_x_test_adv = np.asarray([0.860373, 0.455002, 0.654925, 0.240258])
         np.testing.assert_array_almost_equal(x_test_adv[0, :], expected_x_test_adv, decimal=6)
         predictions_adv = np.argmax(classifier.predict(x_test_adv), axis=1)
         np.testing.assert_array_equal(
@@ -529,7 +531,7 @@ class TestElasticNet(TestBase):
                     1,
                     1,
                     2,
-                    0,
+                    2,
                     2,
                     2,
                     1,
@@ -541,13 +543,15 @@ class TestElasticNet(TestBase):
         accuracy = 1.0 - np.sum(predictions_adv == np.argmax(self.y_test_iris, axis=1)) / self.y_test_iris.shape[0]
         logger.info("EAD success rate on Iris: %.2f%%", (accuracy * 100))
 
+        k.clear_session()
+
     def test_3_tensorflow_iris(self):
-        classifier, _ = get_tabular_classifier_tf()
+        classifier, sess = get_tabular_classifier_tf()
 
         # Test untargeted attack
         attack = ElasticNet(classifier, targeted=False, max_iter=10)
         x_test_adv = attack.generate(self.x_test_iris)
-        expected_x_test_adv = np.asarray([0.8479195, 0.42525578, 0.70166135, 0.28664514])
+        expected_x_test_adv = np.asarray([0.852286, 0.434626, 0.703376, 0.293738])
         np.testing.assert_array_almost_equal(x_test_adv[0, :], expected_x_test_adv, decimal=6)
         self.assertLessEqual(np.amax(x_test_adv), 1.0)
         self.assertGreaterEqual(np.amin(x_test_adv), 0.0)
@@ -586,13 +590,13 @@ class TestElasticNet(TestBase):
                     2,
                     2,
                     2,
-                    2,
+                    1,
                     2,
                     1,
                     2,
                     1,
                     0,
-                    2,
+                    1,
                     2,
                     1,
                     2,
@@ -612,7 +616,7 @@ class TestElasticNet(TestBase):
         targets = random_targets(self.y_test_iris, nb_classes=3)
         attack = ElasticNet(classifier, targeted=True, max_iter=10)
         x_test_adv = attack.generate(self.x_test_iris, **{"y": targets})
-        expected_x_test_adv = np.asarray([0.8859426, 0.51877, 0.5014498, 0.05447771])
+        expected_x_test_adv = np.asarray([0.892806, 0.531875, 0.501707, 0.059951])
         np.testing.assert_array_almost_equal(x_test_adv[0, :], expected_x_test_adv, decimal=6)
         self.assertLessEqual(np.amax(x_test_adv), 1.0)
         self.assertGreaterEqual(np.amin(x_test_adv), 0.0)
@@ -674,11 +678,15 @@ class TestElasticNet(TestBase):
         accuracy = np.sum(predictions_adv == np.argmax(targets, axis=1)) / self.y_test_iris.shape[0]
         logger.info("Targeted EAD success rate on Iris: %.2f%%", (accuracy * 100))
 
+        # Close session
+        if sess is not None:
+            sess.close()
+
     def test_5_pytorch_iris(self):
         classifier = get_tabular_classifier_pt()
         attack = ElasticNet(classifier, targeted=False, max_iter=10)
         x_test_adv = attack.generate(self.x_test_iris.astype(np.float32))
-        expected_x_test_adv = np.asarray([0.8479194, 0.42525578, 0.70166135, 0.28664517])
+        expected_x_test_adv = np.asarray([0.852286, 0.434626, 0.703376, 0.293738])
         np.testing.assert_array_almost_equal(x_test_adv[0, :], expected_x_test_adv, decimal=6)
         self.assertLessEqual(np.amax(x_test_adv), 1.0)
         self.assertGreaterEqual(np.amin(x_test_adv), 0.0)
@@ -717,13 +725,13 @@ class TestElasticNet(TestBase):
                     2,
                     2,
                     2,
-                    2,
+                    1,
                     2,
                     1,
                     2,
                     1,
                     0,
-                    2,
+                    1,
                     2,
                     1,
                     2,
