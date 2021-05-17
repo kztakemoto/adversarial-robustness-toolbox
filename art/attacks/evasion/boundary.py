@@ -389,15 +389,19 @@ class BoundaryAttack(EvasionAttack):
 
             # Attack unsatisfied yet and the initial image satisfied
             if adv_init is not None and init_pred == y:
+                print('out001')
                 return adv_init.astype(ART_NUMPY_DTYPE), init_pred
 
             # Attack unsatisfied yet and the initial image unsatisfied
             for _ in range(self.init_size):
+                print('out002')
                 random_img = nprd.uniform(clip_min, clip_max, size=x.shape).astype(x.dtype)
                 random_class = np.argmax(
                     self.estimator.predict(np.array([random_img]), batch_size=self.batch_size),
                     axis=1,
                 )[0]
+
+                print(y)
 
                 if random_class == y:
                     initial_sample = random_img, random_class
@@ -427,7 +431,7 @@ class BoundaryAttack(EvasionAttack):
                     break
             else:
                 logger.warning("Failed to draw a random image that is adversarial, attack failed.")
-        print(initial_sample)
+
         return initial_sample
 
     @staticmethod
