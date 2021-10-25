@@ -28,12 +28,12 @@ mxnet-native==1.8.0.post0
 --find-links https://download.pytorch.org/whl/torch_stable.html
 torch==1.8.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
-torchvision==0.9.1 -f https://download.pytorch.org/whl/torch_stable.html
+torchvision==0.11.1 -f https://download.pytorch.org/whl/torch_stable.html
 catboost==1.0.0
 GPy==1.10.0
 lightgbm==3.3.0
 xgboost==1.4.2
-kornia~=0.5.11
+kornia~=0.6.1
 tensorboardX==2.4
 lief==0.11.5
 
