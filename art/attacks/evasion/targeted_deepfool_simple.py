@@ -61,7 +61,6 @@ class TargetedDeepFool_simple(EvasionAttack):
         classifier: "CLASSIFIER_CLASS_LOSS_GRADIENTS_TYPE",
         max_iter: int = 100,
         epsilon: float = 1e-6,
-        nb_grads: int = 10,
         batch_size: int = 1,
         verbose: bool = True,
     ) -> None:
@@ -71,15 +70,12 @@ class TargetedDeepFool_simple(EvasionAttack):
         :param classifier: A trained classifier.
         :param max_iter: The maximum number of iterations.
         :param epsilon: Overshoot parameter.
-        :param nb_grads: The number of class gradients (top nb_grads w.r.t. prediction) to compute. This way only the
-                         most likely classes are considered, speeding up the computation.
         :param batch_size: Batch size
         :param verbose: Show progress bars.
         """
         super().__init__(estimator=classifier)
         self.max_iter = max_iter
         self.epsilon = epsilon
-        self.nb_grads = nb_grads
         self.batch_size = batch_size
         self.verbose = verbose
         self._check_params()
@@ -116,13 +112,7 @@ class TargetedDeepFool_simple(EvasionAttack):
             )
 
         # Determine the class labels for which to compute the gradients
-        use_grads_subset = self.nb_grads < self.estimator.nb_classes
-        if use_grads_subset:
-            # TODO compute set of unique labels per batch
-            grad_labels = np.argsort(-preds, axis=1)[:, : self.nb_grads]
-            labels_set = np.unique(grad_labels)
-        else:
-            labels_set = np.arange(self.estimator.nb_classes)
+        labels_set = np.arange(self.estimator.nb_classes)
         sorter = np.arange(len(labels_set))
 
         # Pick a small scalar to avoid division by 0
@@ -139,13 +129,8 @@ class TargetedDeepFool_simple(EvasionAttack):
             f_batch = preds[batch_index_1:batch_index_2]
             f_target_y = y[batch_index_1:batch_index_2]
             fk_hat = np.argmax(f_batch, axis=1)
-            if use_grads_subset:
-                # Compute gradients only for top predicted classes
-                grd = np.array([self.estimator.class_gradient(batch, label=_) for _ in labels_set])
-                grd = np.squeeze(np.swapaxes(grd, 0, 2), axis=0)
-            else:
-                # Compute gradients for all classes
-                grd = self.estimator.class_gradient(batch)
+            # Compute gradients for all classes
+            grd = self.estimator.class_gradient(batch)
 
             # Get current predictions
             active_indices = np.arange(len(batch))
@@ -194,13 +179,7 @@ class TargetedDeepFool_simple(EvasionAttack):
                 fk_i_hat = np.argmax(f_batch, axis=1)
 
                 # Recompute gradients for new x
-                if use_grads_subset:
-                    # Compute gradients only for (originally) top predicted classes
-                    grd = np.array([self.estimator.class_gradient(batch, label=_) for _ in labels_set])
-                    grd = np.squeeze(np.swapaxes(grd, 0, 2), axis=0)
-                else:
-                    # Compute gradients for all classes
-                    grd = self.estimator.class_gradient(batch)
+                grd = self.estimator.class_gradient(batch)
 
                 # Stop if misclassification has been achieved
                 active_indices = np.where(fk_i_hat != np.argmax(f_target_y, axis=1))[0]
@@ -229,9 +208,6 @@ class TargetedDeepFool_simple(EvasionAttack):
     def _check_params(self) -> None:
         if not isinstance(self.max_iter, (int, np.int)) or self.max_iter <= 0:
             raise ValueError("The number of iterations must be a positive integer.")
-
-        if not isinstance(self.nb_grads, (int, np.int)) or self.nb_grads <= 0:
-            raise ValueError("The number of class gradients to compute must be a positive integer.")
 
         if self.epsilon < 0:
             raise ValueError("The overshoot parameter must not be negative.")
