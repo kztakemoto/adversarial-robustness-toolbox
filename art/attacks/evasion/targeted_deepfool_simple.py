@@ -204,6 +204,7 @@ class TargetedDeepFool_simple(EvasionAttack):
 
                 # Stop if misclassification has been achieved
                 active_indices = np.where(fk_i_hat != np.argmax(f_target_y, axis=1))[0]
+                fk_hat = fk_i_hat
 
                 current_step += 1
 
