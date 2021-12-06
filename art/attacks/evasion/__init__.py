@@ -58,3 +58,4 @@ from art.attacks.evasion.universal_simba import Universal_SimBA
 from art.attacks.evasion.universal_simba_coarse_grain import Universal_SimBA_CG
 from art.attacks.evasion.universal_simba_cross_entropy import Universal_SimBA_CE
 from art.attacks.evasion.fourier_attack import FourierAttack
+from art.attacks.evasion.targeted_deepfool_simple import TargetedDeepFool_simple
