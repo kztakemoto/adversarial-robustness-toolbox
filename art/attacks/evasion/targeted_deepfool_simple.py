@@ -203,7 +203,7 @@ class TargetedDeepFool_simple(EvasionAttack):
                     grd = self.estimator.class_gradient(batch)
 
                 # Stop if misclassification has been achieved
-                active_indices = np.where(fk_i_hat == fk_hat)[0]
+                active_indices = np.where(fk_i_hat != np.argmax(f_target_y, axis=1))[0]
 
                 current_step += 1
 
