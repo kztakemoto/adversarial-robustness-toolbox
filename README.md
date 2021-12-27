@@ -1,6 +1,6 @@
-This is a modified version ART v1.8.1.
+This is a modified version ART v1.9.0.
 
-# Adversarial Robustness Toolbox (ART) v1.8
+# Adversarial Robustness Toolbox (ART) v1.9
 <p align="center">
   <img src="docs/images/art_lfai.png?raw=true" width="467" title="ART logo">
 </p>
