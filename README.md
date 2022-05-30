@@ -1,4 +1,4 @@
-This is a modified version ART v1.10.1.
+This is a modified version ART v1.10.2.
 
 # Adversarial Robustness Toolbox (ART) v1.10
 <p align="center">
