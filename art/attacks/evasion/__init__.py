@@ -63,3 +63,12 @@ from art.attacks.evasion.universal_simba_coarse_grain import Universal_SimBA_CG
 from art.attacks.evasion.universal_simba_cross_entropy import Universal_SimBA_CE
 from art.attacks.evasion.fourier_attack import FourierAttack
 from art.attacks.evasion.targeted_deepfool_simple import TargetedDeepFool_simple
+from art.attacks.evasion.smoothed_fast_gradient import SmoothedFastGradientMethod
+from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent import SmoothedProjectedGradientDescent
+from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_numpy import (
+    SmoothedProjectedGradientDescentNumpy,
+)
+from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_tensorflow_v2 import (
+    SmoothedProjectedGradientDescentTensorFlowV2,
+)
+from art.attacks.evasion.smoothed_iterative_method import SmoothedBasicIterativeMethod
