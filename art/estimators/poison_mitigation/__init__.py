@@ -5,3 +5,5 @@ from art.estimators.poison_mitigation import neural_cleanse
 from art.estimators.poison_mitigation.strip import strip
 from art.estimators.poison_mitigation.neural_cleanse.keras import KerasNeuralCleanse
 from art.estimators.poison_mitigation.strip.strip import STRIPMixin
+from art.estimators.poison_mitigation import neural_cleanse_ym
+from art.estimators.poison_mitigation.neural_cleanse_ym.keras import KerasNeuralCleanseYM
