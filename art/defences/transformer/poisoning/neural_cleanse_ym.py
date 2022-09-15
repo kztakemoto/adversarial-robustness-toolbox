@@ -85,6 +85,7 @@ class NeuralCleanseYM(Transformer):
         cost_multiplier: float = 1.5,
         batch_size: int = 32,
         nb_channels: int = 3,
+        norm_type: str = 'ym',
     ) -> KerasNeuralCleanseYM:
         """
         Returns an new classifier with implementation of methods in Neural Cleanse: Identifying and Mitigating Backdoor
@@ -108,6 +109,7 @@ class NeuralCleanseYM(Transformer):
         :param cost_multiplier: How much to change the cost in the Neural Cleanse optimization
         :param batch_size: The batch size for optimizations in the Neural Cleanse optimization
         :param nb_channels: The number of channels (color 3, mono 1)
+        :param norm_type: Normalization type
         """
         transformed_classifier = KerasNeuralCleanseYM(
             model=transformed_classifier.model,
@@ -123,6 +125,7 @@ class NeuralCleanseYM(Transformer):
             cost_multiplier=cost_multiplier,
             batch_size=batch_size,
             nb_channels=nb_channels,
+            norm_type=norm_type,
         )
         return transformed_classifier
 

@@ -90,6 +90,7 @@ class KerasNeuralCleanseYM(NeuralCleanseMixinYM, KerasClassifier):
         cost_multiplier: float = 1.5,
         batch_size: int = 32,
         nb_channels: int = 3,
+        norm_type: str = 'ym',
     ):
         """
         Create a Neural Cleanse classifier.
@@ -126,6 +127,7 @@ class KerasNeuralCleanseYM(NeuralCleanseMixinYM, KerasClassifier):
         :param cost_multiplier: How much to change the cost in the Neural Cleanse optimization
         :param batch_size: The batch size for optimizations in the Neural Cleanse optimization
         :param nb_channels: The number of channels (color 3, mono 1)
+        :param norm_type: Normalization type
         """
         import keras.backend as K
         from keras.losses import categorical_crossentropy
@@ -153,14 +155,14 @@ class KerasNeuralCleanseYM(NeuralCleanseMixinYM, KerasClassifier):
             cost_multiplier=cost_multiplier,
             batch_size=batch_size,
             nb_channels=nb_channels,
+            norm_type=norm_type,
         )
         mask = np.random.uniform(size=super().input_shape)
         pattern = np.random.uniform(size=super().input_shape)
         self.epsilon = K.epsilon()
 
-        # for normalization in VGG20-Cifar10 model https://github.com/GuanqiaoDing/CNN-CIFAR10
-        mean = K.constant([[[125.30691805, 122.95039414, 113.86538318]]])
-        std = K.constant([[[62.99321928, 62.08870764, 66.70489964]]])
+        mean = K.constant([[[0.229, 0.224, 0.225]]])
+        std = K.constant([[[0.485, 0.456, 0.406]]])
 
         # Normalize mask between [0, 1]
         self.mask_tensor_raw = K.variable(mask)
@@ -174,16 +176,32 @@ class KerasNeuralCleanseYM(NeuralCleanseMixinYM, KerasClassifier):
         reverse_mask_tensor = K.ones_like(self.mask_tensor) - self.mask_tensor
         
         input_tensor = K.placeholder(model.input_shape)
-        # denormalization for Matsuo study
-        input_tensor_raw = (input_tensor * 128.0 + 128.0) / 255.0
-        # denormalization for VGG20-Cifar10 model https://github.com/GuanqiaoDing/CNN-CIFAR10
-        #input_tensor_raw = (input_tensor * std + mean) / 255.0
+        
+        if self.norm_type == 'ym':
+            # denormalization for Matsuo study
+            input_tensor_raw = (input_tensor * 128.0 + 128.0) / 255.0
+        elif self.norm_type == 'inception':
+            input_tensor_raw = (input_tensor * 127.5 + 127.5) / 255.0
+        elif self.norm_type == 'resnet':
+            input_tensor_raw = (input_tensor * std + mean)
+        elif self.norm_type == 'raw':
+            input_tensor_raw = input_tensor
+        else:
+            raise ValueError("invalid normalization type")
 
         x_adv_tensor_raw = reverse_mask_tensor * input_tensor_raw + self.mask_tensor * self.pattern_tensor
-        # normalization for Matsuo study
-        x_adv_tensor = (x_adv_tensor_raw * 255.0 - 128.0) / 128.0 # denormalization
-        # for normalization in VGG20-Cifar10 model https://github.com/GuanqiaoDing/CNN-CIFAR10
-        #x_adv_tensor = (x_adv_tensor_raw * 255.0 - mean) / std
+
+        if self.norm_type == 'ym':
+            # normalization for Matsuo study
+            x_adv_tensor = (x_adv_tensor_raw * 255.0 - 128.0) / 128.0
+        elif self.norm_type == 'inception':
+            x_adv_tensor = (x_adv_tensor_raw * 255.0 - 127.5) / 127.5
+        elif self.norm_type == 'resnet':
+            x_adv_tensor = (x_adv_tensor_raw - mean) / std
+        elif self.norm_type == 'raw':
+            x_adv_tensor = x_adv_tensor_raw
+        else:
+            raise ValueError("invalid normalization type")
         
         output_tensor = self.model(x_adv_tensor)
         y_true_tensor = K.placeholder(model.outputs[0].shape.as_list())

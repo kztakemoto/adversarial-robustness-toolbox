@@ -56,6 +56,7 @@ class NeuralCleanseMixinYM(AbstainPredictorMixin):
         cost_multiplier: float = 1.5,
         batch_size: int = 32,
         nb_channels: int = 3,
+        norm_type: str = 'ym',
         **kwargs
     ) -> None:
         """
@@ -74,6 +75,7 @@ class NeuralCleanseMixinYM(AbstainPredictorMixin):
         :param cost_multiplier: How much to change the cost in the Neural Cleanse optimization
         :param batch_size: The batch size for optimizations in the Neural Cleanse optimization
         :param nb_channels: The number of channels (color 3, mono 1)
+        :param norm_type: Normalization type
         """
         super().__init__(*args, **kwargs)
         self.steps = steps
@@ -89,6 +91,7 @@ class NeuralCleanseMixinYM(AbstainPredictorMixin):
         self.cost_multiplier_down = cost_multiplier ** 1.5
         self.batch_size = batch_size
         self.nb_channels = nb_channels
+        self.norm_type = norm_type
         self.top_indices: List[int] = []
         self.activation_threshold = 0
 
