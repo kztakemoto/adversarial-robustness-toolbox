@@ -65,6 +65,7 @@ class KerasNeuralCleanseYM(NeuralCleanseMixinYM, KerasClassifier):
         "cost_multiplier_down",
         "batch_size",
         "nb_channels",
+        "norm_type",
     ]
 
     def __init__(

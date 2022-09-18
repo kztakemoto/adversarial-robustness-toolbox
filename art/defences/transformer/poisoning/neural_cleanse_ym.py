@@ -58,6 +58,7 @@ class NeuralCleanseYM(Transformer):
         "cost_multiplier",
         "batch_size",
         "nb_channels",
+        "norm_type",
     ]
 
     def __init__(self, classifier: "CLASSIFIER_TYPE") -> None:
