@@ -60,7 +60,8 @@ show how to use ART to create feature adversaries ([Sabour et al., 2016](https:/
 [attack_adversarial_patch.ipynb](adversarial_patch/attack_adversarial_patch.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/adversarial_patch/attack_adversarial_patch.ipynb)]
 shows how to use ART to create real-world adversarial patches that fool real-world object detection and classification 
 models.
-[attack_adversarial_patch_TensorFlowV2.ipynb](adversarial_patch/attack_adversarial_patch.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/adversarial_patch/attack_adversarial_patch_TensorFlowV2.ipynb)]  TensorFlow v2 specific attack implementation.
+[attack_adversarial_patch_TensorFlowV2.ipynb](adversarial_patch/attack_adversarial_patch.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/adversarial_patch/attack_adversarial_patch_TensorFlowV2.ipynb)]  TensorFlow v2 specific attack implementation. 
+[attack_adversarial_patch_pytorch_yolo.ipynb](adversarial_patch/attack_adversarial_patch_pytorch_yolo.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/adversarial_patch/attack_adversarial_patch_pytorch_yolo.ipynb)] YOLO v3 and v5 specific attack.
 
 <p align="center">
   <img src="../utils/data/images/adversarial_patch.png?raw=true" width="200" title="adversarial_patch">
@@ -240,7 +241,7 @@ demonstrates working Poison Frog (Feature Collision) poisoning attack implemente
 [poisoning_attack_feature_collision-pytorch.ipynb](poisoning_attack_feature_collision-pytorch.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/poisoning_attack_feature_collision-pytorch.ipynb)]
 demonstrates working Poison Frog (Feature Collision) poisoning attack implemented in PyTorch Framework on CIFAR10 dataset as per the ([paper](https://arxiv.org/pdf/1804.00792.pdf)). This is a targeted clean label attack, which do not require the attacker to have any control over the labeling of training data and control the behavior of the classifier on a specific test instance without degrading overall classifier performance.
 
-[poisoning_attack_sleeper_agent_pytorch.ipynb](poisoning_attack_sleeper_agent_pytorch.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/poisoning_attack_sleeper_agent+pytorch.ipynb)]
+[poisoning_attack_sleeper_agent_pytorch.ipynb](poisoning_attack_sleeper_agent_pytorch.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/poisoning_attack_sleeper_agent_pytorch.ipynb)]
 demonstrates working Sleeper Agent poisoning attack implemented in PyTorch Framework on CIFAR10 dataset as per the ([paper](https://arxiv.org/pdf/2106.08970.pdf)). A new hidden trigger attack, Sleeper Agent,
 which employs gradient matching, data selection, and target model re-training during the crafting process. Sleeper
 Agent is the first hidden trigger backdoor attack to be effective against neural networks trained from scratch.
@@ -258,7 +259,16 @@ demonstrates the verification of adversarial robustness in decision tree ensembl
 demonstrates using DeepZ to compute certified robustness for neural networks.
 
 <p align="center">
-  <img src="../utils/data/images/zonotope_picture.png?raw=true" width="200" title="poisoning">
+  <img src="../utils/data/images/zonotope_picture.png?raw=true" width="200" title="deepz">
+</p>
+
+## Certified Training
+
+[certified_adversarial_training.ipynb](certified_adversarial_training.ipynb) [[on nbviewer](https://nbviewer.jupyter.org/github/Trusted-AI/adversarial-robustness-toolbox/blob/main/notebooks/certified_adversarial_training.ipynb)]
+Demonstrates training a neural network for certified robustness using bound propagation techniques.
+
+<p align="center">
+  <img src="../utils/data/images/cert_training.png?raw=true" width="200" title="certified training">
 </p>
 
 ## MNIST
