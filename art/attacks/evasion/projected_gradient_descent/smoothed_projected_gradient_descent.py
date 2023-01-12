@@ -37,8 +37,8 @@ from art.attacks.attack import EvasionAttack
 from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_numpy import (
     SmoothedProjectedGradientDescentNumpy,
 )
-from art.attacks.evasion.projected_gradient_descent.projected_gradient_descent_pytorch import (
-    ProjectedGradientDescentPyTorch,
+from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_pytorch import (
+    SmoothedProjectedGradientDescentPyTorch,
 )
 from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_tensorflow_v2 import (
     SmoothedProjectedGradientDescentTensorFlowV2,
@@ -139,11 +139,11 @@ class SmoothedProjectedGradientDescent(EvasionAttack):
         SmoothedProjectedGradientDescent._check_params(self)
 
         self._attack: Union[
-            ProjectedGradientDescentPyTorch, SmoothedProjectedGradientDescentTensorFlowV2, SmoothedProjectedGradientDescentNumpy
+            SmoothedProjectedGradientDescentPyTorch, SmoothedProjectedGradientDescentTensorFlowV2, SmoothedProjectedGradientDescentNumpy
         ]
         ### PyTorchClassifier is NOT supported ###
         if isinstance(self.estimator, PyTorchClassifier) and self.estimator.all_framework_preprocessing:
-            self._attack = ProjectedGradientDescentPyTorch(
+            self._attack = SmoothedProjectedGradientDescentPyTorch(
                 estimator=estimator,  # type: ignore
                 norm=norm,
                 eps=eps,
@@ -151,13 +151,14 @@ class SmoothedProjectedGradientDescent(EvasionAttack):
                 decay=decay,
                 max_iter=max_iter,
                 targeted=targeted,
+                nb_grads=nb_grads,
+                smoothing_scale=smoothing_scale,
                 num_random_init=num_random_init,
                 batch_size=batch_size,
                 random_eps=random_eps,
                 summary_writer=summary_writer,
                 verbose=verbose,
             )
-            raise TypeError("Current version does NOT support PyTorchClassifier.")
 
         elif isinstance(self.estimator, TensorFlowV2Classifier) and self.estimator.all_framework_preprocessing:
             self._attack = SmoothedProjectedGradientDescentTensorFlowV2(

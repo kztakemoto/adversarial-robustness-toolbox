@@ -76,6 +76,9 @@ from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_
 from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_numpy import (
     SmoothedProjectedGradientDescentNumpy,
 )
+from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_pytorch import (
+    SmoothedProjectedGradientDescentPyTorch,
+)
 from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_tensorflow_v2 import (
     SmoothedProjectedGradientDescentTensorFlowV2,
 )

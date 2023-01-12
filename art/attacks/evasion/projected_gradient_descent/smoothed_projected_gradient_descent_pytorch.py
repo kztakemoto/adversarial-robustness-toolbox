@@ -32,23 +32,23 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from art.config import ART_NUMPY_DTYPE
+from art.summary_writer import SummaryWriter
 from art.estimators.estimator import BaseEstimator, LossGradientsMixin
 from art.estimators.classification.classifier import ClassifierMixin
 from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_descent_numpy import (
     SmoothedProjectedGradientDescentCommon,
 )
 from art.utils import compute_success, random_sphere, compute_success_array
-from art.summary_writer import SummaryWriter
 
 if TYPE_CHECKING:
     # pylint: disable=C0412
-    import tensorflow as tf
-    from art.estimators.classification.tensorflow import TensorFlowV2Classifier
+    import torch
+    from art.estimators.classification.pytorch import PyTorchClassifier
 
 logger = logging.getLogger(__name__)
 
 
-class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDescentCommon):
+class SmoothedProjectedGradientDescentPyTorch(SmoothedProjectedGradientDescentCommon):
     """
     The Projected Gradient Descent attack is an iterative method in which, after each iteration, the perturbation is
     projected on an lp-ball of specified radius (in addition to clipping the values of the adversarial sample so that it
@@ -61,7 +61,7 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
 
     def __init__(
         self,
-        estimator: "TensorFlowV2Classifier",
+        estimator: Union["PyTorchClassifier"],
         norm: Union[int, float, str] = np.inf,
         eps: Union[int, float, np.ndarray] = 0.3,
         eps_step: Union[int, float, np.ndarray] = 0.1,
@@ -77,17 +77,16 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
         verbose: bool = True,
     ):
         """
-        Create a :class:`.SmoothedProjectedGradientDescentTensorFlowV2` instance.
+        Create a :class:`.SmoothedProjectedGradientDescentPyTorch` instance.
 
         :param estimator: An trained estimator.
-        :param norm: The norm of the adversarial perturbation. Possible values: np.inf, 1 or 2.
+        :param norm: The norm of the adversarial perturbation. Possible values: "inf", np.inf, 1 or 2.
         :param eps: Maximum perturbation that the attacker can introduce.
         :param eps_step: Attack step size (input variation) at each iteration.
         :param random_eps: When True, epsilon is drawn randomly from truncated normal distribution. The literature
                            suggests this for FGSM based training to generalize across different epsilons. eps_step is
                            modified to preserve the ratio of eps / eps_step. The effectiveness of this method with PGD
                            is untested (https://arxiv.org/pdf/1611.01236.pdf).
-        :param decay: Decay factor for accumulating the velocity vector when using momentum.
         :param max_iter: The maximum number of iterations.
         :param targeted: Indicates whether the attack is targeted (True) or untargeted (False).
         :param nb_grads: Number of loss gradients for smoothing.
@@ -125,9 +124,12 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
             num_random_init=num_random_init,
             batch_size=batch_size,
             random_eps=random_eps,
-            summary_writer=summary_writer,
             verbose=verbose,
+            summary_writer=summary_writer,
         )
+
+        self._batch_id = 0
+        self._i_max_iter = 0
 
     def generate(self, x: np.ndarray, y: Optional[np.ndarray] = None, **kwargs) -> np.ndarray:
         """
@@ -144,7 +146,7 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
         :type mask: `np.ndarray`
         :return: An array holding the adversarial examples.
         """
-        import tensorflow as tf  # lgtm [py/repeated-import]
+        import torch
 
         mask = self._get_mask(x, **kwargs)
 
@@ -162,38 +164,35 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
             # Here we need to make a distinction: if the masks are different for each input, we need to index
             # those for the current batch. Otherwise (i.e. mask is meant to be broadcasted), keep it as it is.
             if len(mask.shape) == len(x.shape):
-                dataset = tf.data.Dataset.from_tensor_slices(
-                    (
-                        x.astype(ART_NUMPY_DTYPE),
-                        targets.astype(ART_NUMPY_DTYPE),
-                        mask.astype(ART_NUMPY_DTYPE),
-                    )
-                ).batch(self.batch_size, drop_remainder=False)
+                dataset = torch.utils.data.TensorDataset(
+                    torch.from_numpy(x.astype(ART_NUMPY_DTYPE)),
+                    torch.from_numpy(targets.astype(ART_NUMPY_DTYPE)),
+                    torch.from_numpy(mask.astype(ART_NUMPY_DTYPE)),
+                )
 
             else:
-                dataset = tf.data.Dataset.from_tensor_slices(
-                    (
-                        x.astype(ART_NUMPY_DTYPE),
-                        targets.astype(ART_NUMPY_DTYPE),
-                        np.array([mask.astype(ART_NUMPY_DTYPE)] * x.shape[0]),
-                    )
-                ).batch(self.batch_size, drop_remainder=False)
+                dataset = torch.utils.data.TensorDataset(
+                    torch.from_numpy(x.astype(ART_NUMPY_DTYPE)),
+                    torch.from_numpy(targets.astype(ART_NUMPY_DTYPE)),
+                    torch.from_numpy(np.array([mask.astype(ART_NUMPY_DTYPE)] * x.shape[0])),
+                )
 
         else:
-            dataset = tf.data.Dataset.from_tensor_slices(
-                (
-                    x.astype(ART_NUMPY_DTYPE),
-                    targets.astype(ART_NUMPY_DTYPE),
-                )
-            ).batch(self.batch_size, drop_remainder=False)
+            dataset = torch.utils.data.TensorDataset(
+                torch.from_numpy(x.astype(ART_NUMPY_DTYPE)),
+                torch.from_numpy(targets.astype(ART_NUMPY_DTYPE)),
+            )
+
+        data_loader = torch.utils.data.DataLoader(
+            dataset=dataset, batch_size=self.batch_size, shuffle=False, drop_last=False
+        )
 
         # Start to compute adversarial examples
         adv_x = x.astype(ART_NUMPY_DTYPE)
-        data_loader = iter(dataset)
 
         # Compute perturbation with batching
         for (batch_id, batch_all) in enumerate(
-            tqdm(data_loader, desc="smoothed PGD - Batches", leave=False, disable=not self.verbose)
+            tqdm(data_loader, desc="Smoothed PGD - Batches", leave=False, disable=not self.verbose)
         ):
 
             self._batch_id = batch_id
@@ -229,6 +228,8 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
                     adversarial_batch = self._generate_batch(
                         x=batch, targets=batch_labels, mask=mask_batch, eps=batch_eps, eps_step=batch_eps_step
                     )
+
+                    # return the successful adversarial examples
                     attack_success = compute_success_array(
                         self.estimator,
                         batch,
@@ -237,7 +238,6 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
                         self.targeted,
                         batch_size=self.batch_size,
                     )
-                    # return the successful adversarial examples
                     adv_x[batch_index_1:batch_index_2][attack_success] = adversarial_batch[attack_success]
 
         logger.info(
@@ -252,12 +252,12 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
 
     def _generate_batch(
         self,
-        x: "tf.Tensor",
-        targets: "tf.Tensor",
-        mask: "tf.Tensor",
+        x: "torch.Tensor",
+        targets: "torch.Tensor",
+        mask: "torch.Tensor",
         eps: Union[int, float, np.ndarray],
         eps_step: Union[int, float, np.ndarray],
-    ) -> "tf.Tensor":
+    ) -> np.ndarray:
         """
         Generate a batch of adversarial samples and return them in an array.
 
@@ -270,34 +270,27 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
         :param eps_step: Attack step size (input variation) at each iteration.
         :return: Adversarial examples.
         """
-        import tensorflow as tf  # lgtm [py/repeated-import]
+        import torch
 
-        adv_x = tf.identity(x)
-        momentum = tf.zeros(x.shape)
+        inputs = x.to(self.estimator.device)
+        targets = targets.to(self.estimator.device)
+        adv_x = torch.clone(inputs)
+        momentum = torch.zeros(inputs.shape)
+
+        if mask is not None:
+            mask = mask.to(self.estimator.device)
 
         for i_max_iter in range(self.max_iter):
             self._i_max_iter = i_max_iter
-            adv_x = self._compute_tf(
-                adv_x,
-                x,
-                targets,
-                mask,
-                eps,
-                eps_step,
-                momentum,
-                self.num_random_init > 0 and i_max_iter == 0,
+            adv_x = self._compute_pytorch(
+                adv_x, inputs, targets, mask, eps, eps_step, self.num_random_init > 0 and i_max_iter == 0, momentum
             )
 
-        return adv_x
+        return adv_x.cpu().detach().numpy()
 
-    def _compute_perturbation(  # pylint: disable=W0221
-        self,
-        x: "tf.Tensor",
-        y: "tf.Tensor",
-        mask: Optional["tf.Tensor"],
-        decay: Optional[float] = None,
-        momentum: Optional["tf.Tensor"] = None,
-    ) -> "tf.Tensor":
+    def _compute_perturbation_pytorch(  # pylint: disable=W0221
+        self, x: "torch.Tensor", y: "torch.Tensor", mask: Optional["torch.Tensor"], momentum: "torch.Tensor"
+    ) -> "torch.Tensor":
         """
         Compute perturbations.
 
@@ -309,27 +302,21 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
         :param mask: An array with a mask broadcastable to input `x` defining where to apply adversarial perturbations.
                      Shape needs to be broadcastable to the shape of x and can also be of the same shape as `x`. Any
                      features for which the mask is zero will not be adversarially perturbed.
-        :param decay: Decay factor for accumulating the velocity vector when using momentum.
-        :param momentum: An array accumulating the velocity vector in the gradient direction for MIFGSM.
         :return: Perturbations.
         """
-        import tensorflow as tf  # lgtm [py/repeated-import]
+        import torch
 
         # Pick a small scalar to avoid division by 0
         tol = 10e-8
 
         # Get gradient wrt loss; invert it if attack is targeted
-        gaussian_noise = np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape).astype(ART_NUMPY_DTYPE)
-        grad: tf.Tensor = self.estimator.loss_gradient(x+gaussian_noise, y) * tf.constant(
-            1 - 2 * int(self.targeted), dtype=ART_NUMPY_DTYPE
-        )
+        gaussian_noise = torch.from_numpy(np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape).astype(ART_NUMPY_DTYPE)).to(self.estimator.device)
+        grad = self.estimator.loss_gradient(x=x+gaussian_noise, y=y) * (1 - 2 * int(self.targeted))
 
         if self.nb_grads > 1:
             for i in range(1,self.nb_grads):
-                gaussian_noise = np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape).astype(ART_NUMPY_DTYPE)
-                tmp_grad: tf.Tensor = self.estimator.loss_gradient(x+gaussian_noise, y) * tf.constant(
-                    1 - 2 * int(self.targeted), dtype=ART_NUMPY_DTYPE
-                )
+                gaussian_noise = torch.from_numpy(np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape).astype(ART_NUMPY_DTYPE)).to(self.estimator.device)
+                tmp_grad = self.estimator.loss_gradient(x=x+gaussian_noise, y=y) * (1 - 2 * int(self.targeted))
                 grad = grad + tmp_grad
             
             grad = grad / float(self.nb_grads)
@@ -339,52 +326,50 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
             self.summary_writer.update(
                 batch_id=self._batch_id,
                 global_step=self._i_max_iter,
-                grad=grad.numpy(),
+                grad=grad.cpu().detach().numpy(),
                 patch=None,
                 estimator=self.estimator,
-                x=x.numpy(),
-                y=y.numpy(),
+                x=x.cpu().detach().numpy(),
+                y=y.cpu().detach().numpy(),
                 targeted=self.targeted,
             )
 
-        # Check for NaN before normalisation an replace with 0
-        if tf.reduce_any(tf.math.is_nan(grad)):  # pragma: no cover
+        # Check for nan before normalisation an replace with 0
+        if torch.any(grad.isnan()):  # pragma: no cover
             logger.warning("Elements of the loss gradient are NaN and have been replaced with 0.0.")
-            grad = tf.where(tf.math.is_nan(grad), tf.zeros_like(grad), grad)
+            grad[grad.isnan()] = 0.0
 
         # Apply mask
         if mask is not None:
-            grad = tf.where(mask == 0.0, 0.0, grad)
+            grad = torch.where(mask == 0.0, torch.tensor(0.0).to(self.estimator.device), grad)
 
-        # Add momentum
-        if decay is not None and momentum is not None:
+        # Apply momentum
+        if self.decay is not None:
             ind = tuple(range(1, len(x.shape)))
-            grad = tf.divide(grad, (tf.math.reduce_sum(tf.abs(grad), axis=ind, keepdims=True) + tol))
+            grad = grad / (torch.sum(grad.abs(), dim=ind, keepdims=True) + tol)  # type: ignore
             grad = self.decay * momentum + grad
             # Accumulate the gradient for the next iter
             momentum += grad
 
         # Apply norm bound
-        if self.norm == np.inf:
-            grad = tf.sign(grad)
+        if self.norm in ["inf", np.inf]:
+            grad = grad.sign()
 
         elif self.norm == 1:
             ind = tuple(range(1, len(x.shape)))
-            grad = tf.divide(grad, (tf.math.reduce_sum(tf.abs(grad), axis=ind, keepdims=True) + tol))
+            grad = grad / (torch.sum(grad.abs(), dim=ind, keepdims=True) + tol)  # type: ignore
 
         elif self.norm == 2:
             ind = tuple(range(1, len(x.shape)))
-            grad = tf.divide(
-                grad, (tf.math.sqrt(tf.math.reduce_sum(tf.math.square(grad), axis=ind, keepdims=True)) + tol)
-            )
+            grad = grad / (torch.sqrt(torch.sum(grad * grad, axis=ind, keepdims=True)) + tol)  # type: ignore
 
         assert x.shape == grad.shape
 
         return grad
 
-    def _apply_perturbation(  # pylint: disable=W0221
-        self, x: "tf.Tensor", perturbation: "tf.Tensor", eps_step: Union[int, float, np.ndarray]
-    ) -> "tf.Tensor":
+    def _apply_perturbation_pytorch(  # pylint: disable=W0221
+        self, x: "torch.Tensor", perturbation: "torch.Tensor", eps_step: Union[int, float, np.ndarray]
+    ) -> "torch.Tensor":
         """
         Apply perturbation on examples.
 
@@ -393,28 +378,32 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
         :param eps_step: Attack step size (input variation) at each iteration.
         :return: Adversarial examples.
         """
-        import tensorflow as tf  # lgtm [py/repeated-import]
+        import torch
 
-        perturbation_step = tf.constant(eps_step, dtype=ART_NUMPY_DTYPE) * perturbation
-        perturbation_step = tf.where(tf.math.is_nan(perturbation_step), 0, perturbation_step)
+        eps_step = np.array(eps_step, dtype=ART_NUMPY_DTYPE)
+        perturbation_step = torch.tensor(eps_step).to(self.estimator.device) * perturbation
+        perturbation_step[torch.isnan(perturbation_step)] = 0
         x = x + perturbation_step
         if self.estimator.clip_values is not None:
             clip_min, clip_max = self.estimator.clip_values
-            x = tf.clip_by_value(x, clip_value_min=clip_min, clip_value_max=clip_max)
+            x = torch.max(
+                torch.min(x, torch.tensor(clip_max).to(self.estimator.device)),
+                torch.tensor(clip_min).to(self.estimator.device),
+            )
 
         return x
 
-    def _compute_tf(
+    def _compute_pytorch(
         self,
-        x: "tf.Tensor",
-        x_init: "tf.Tensor",
-        y: "tf.Tensor",
-        mask: "tf.Tensor",
+        x: "torch.Tensor",
+        x_init: "torch.Tensor",
+        y: "torch.Tensor",
+        mask: "torch.Tensor",
         eps: Union[int, float, np.ndarray],
         eps_step: Union[int, float, np.ndarray],
-        momentum: Optional["tf.Tensor"],
         random_init: bool,
-    ) -> "tf.Tensor":
+        momentum: "torch.Tensor",
+    ) -> "torch.Tensor":
         """
         Compute adversarial examples for one iteration.
 
@@ -423,7 +412,7 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
         :param y: Target values (class labels) one-hot-encoded of shape `(nb_samples, nb_classes)` or indices of shape
                   (nb_samples,). Only provide this parameter if you'd like to use true labels when crafting adversarial
                   samples. Otherwise, model predictions are used as labels to avoid the "label leaking" effect
-                  (explained in this paper: https://arxiv.org/abs/1611.01236). Default is `None`.
+                  (explained in this paper: https://arxiv.org/abs/1611.01236).
         :param mask: An array with a mask broadcastable to input `x` defining where to apply adversarial perturbations.
                      Shape needs to be broadcastable to the shape of x and can also be of the same shape as `x`. Any
                      features for which the mask is zero will not be adversarially perturbed.
@@ -431,17 +420,17 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
         :param eps_step: Attack step size (input variation) at each iteration.
         :param random_init: Random initialisation within the epsilon ball. For random_init=False starting at the
                             original input.
-        :param momentum: An array accumulating the velocity vector in the gradient direction for MIFGSM.
-        :return: Adversarial examples and accumulated momentum.
+        :return: Adversarial examples.
         """
-        import tensorflow as tf  # lgtm [py/repeated-import]
+        import torch
 
         if random_init:
             n = x.shape[0]
             m = np.prod(x.shape[1:]).item()
 
-            random_perturbation = random_sphere(n, m, eps, self.norm).reshape(x.shape).astype(ART_NUMPY_DTYPE)
-            random_perturbation = tf.convert_to_tensor(random_perturbation)
+            random_perturbation_array = random_sphere(n, m, eps, self.norm).reshape(x.shape).astype(ART_NUMPY_DTYPE)
+            random_perturbation = torch.from_numpy(random_perturbation_array).to(self.estimator.device)
+
             if mask is not None:
                 random_perturbation = random_perturbation * mask
 
@@ -449,42 +438,44 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
 
             if self.estimator.clip_values is not None:
                 clip_min, clip_max = self.estimator.clip_values
-                x_adv = tf.clip_by_value(x_adv, clip_min, clip_max)
+                x_adv = torch.max(
+                    torch.min(x_adv, torch.tensor(clip_max).to(self.estimator.device)),
+                    torch.tensor(clip_min).to(self.estimator.device),
+                )
 
         else:
             x_adv = x
 
         # Get perturbation
-        perturbation = self._compute_perturbation(x_adv, y, mask, self.decay, momentum)
+        perturbation = self._compute_perturbation_pytorch(x_adv, y, mask, momentum)
 
         # Apply perturbation and clip
-        x_adv = self._apply_perturbation(x_adv, perturbation, eps_step)
+        x_adv = self._apply_perturbation_pytorch(x_adv, perturbation, eps_step)
 
         # Do projection
         perturbation = self._projection(x_adv - x_init, eps, self.norm)
 
         # Recompute x_adv
-        x_adv = tf.add(perturbation, x_init)
+        x_adv = perturbation + x_init
 
         return x_adv
 
-    @staticmethod
     def _projection(
-        values: "tf.Tensor", eps: Union[int, float, np.ndarray], norm_p: Union[int, float, str]
-    ) -> "tf.Tensor":
+        self, values: "torch.Tensor", eps: Union[int, float, np.ndarray], norm_p: Union[int, float, str]
+    ) -> "torch.Tensor":
         """
         Project `values` on the L_p norm ball of size `eps`.
 
         :param values: Values to clip.
         :param eps: Maximum norm allowed.
-        :param norm_p: L_p norm to use for clipping supporting 1, 2 and `np.Inf`.
+        :param norm_p: L_p norm to use for clipping supporting 1, 2, `np.Inf` and "inf".
         :return: Values of `values` after projection.
         """
-        import tensorflow as tf  # lgtm [py/repeated-import]
+        import torch
 
         # Pick a small scalar to avoid division by 0
         tol = 10e-8
-        values_tmp = tf.reshape(values, (values.shape[0], -1))
+        values_tmp = values.reshape(values.shape[0], -1)
 
         if norm_p == 2:
             if isinstance(eps, np.ndarray):
@@ -492,8 +483,12 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
                     "The parameter `eps` of type `np.ndarray` is not supported to use with norm 2."
                 )
 
-            values_tmp = values_tmp * tf.expand_dims(
-                tf.minimum(1.0, eps / (tf.norm(values_tmp, ord=2, axis=1) + tol)), axis=1
+            values_tmp = (
+                values_tmp
+                * torch.min(
+                    torch.tensor([1.0], dtype=torch.float32).to(self.estimator.device),
+                    eps / (torch.norm(values_tmp, p=2, dim=1) + tol),
+                ).unsqueeze_(-1)
             )
 
         elif norm_p == 1:
@@ -502,22 +497,28 @@ class SmoothedProjectedGradientDescentTensorFlowV2(SmoothedProjectedGradientDesc
                     "The parameter `eps` of type `np.ndarray` is not supported to use with norm 1."
                 )
 
-            values_tmp = values_tmp * tf.expand_dims(
-                tf.minimum(1.0, eps / (tf.norm(values_tmp, ord=1, axis=1) + tol)), axis=1
+            values_tmp = (
+                values_tmp
+                * torch.min(
+                    torch.tensor([1.0], dtype=torch.float32).to(self.estimator.device),
+                    eps / (torch.norm(values_tmp, p=1, dim=1) + tol),
+                ).unsqueeze_(-1)
             )
 
-        elif norm_p in ["inf", np.inf]:
+        elif norm_p in [np.inf, "inf"]:
             if isinstance(eps, np.ndarray):
-                eps = eps * np.ones(shape=values.shape)
+                eps = eps * np.ones_like(values.cpu())
                 eps = eps.reshape([eps.shape[0], -1])  # type: ignore
 
-            values_tmp = tf.sign(values_tmp) * tf.minimum(tf.math.abs(values_tmp), eps)
+            values_tmp = values_tmp.sign() * torch.min(
+                values_tmp.abs(), torch.tensor([eps], dtype=torch.float32).to(self.estimator.device)
+            )
 
         else:
             raise NotImplementedError(
-                'Values of `norm_p` different from 1, 2 "inf" and `np.inf` are currently not supported.'
+                "Values of `norm_p` different from 1, 2 and `np.inf` are currently not supported."
             )
 
-        values = tf.reshape(values_tmp, values.shape)
+        values = values_tmp.reshape(values.shape)
 
         return values

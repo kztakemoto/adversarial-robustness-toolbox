@@ -409,14 +409,14 @@ class SmoothedFastGradientMethod(EvasionAttack):
         tol = 10e-8
 
         # Get gradient wrt loss; invert it if attack is targeted
-        gaussian_noise = np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape)
+        gaussian_noise = np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape).astype(ART_NUMPY_DTYPE)
         grad = self.estimator.loss_gradient(x+gaussian_noise, y) * (1 - 2 * int(self.targeted))
         if self.nb_grads > 1:
             for i in range(1,self.nb_grads):
-                gaussian_noise = np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape)
+                gaussian_noise = np.random.normal(loc=0.0, scale=self.smoothing_scale, size=x.shape).astype(ART_NUMPY_DTYPE)
                 grad = grad + self.estimator.loss_gradient(x, y) * (1 - 2 * int(self.targeted))
             
-            grad = grad / float(self.nb_grads)
+            grad = grad / np.array(self.nb_grads).astype(ART_NUMPY_DTYPE)
 
         # Write summary
         if self.summary_writer is not None:  # pragma: no cover
