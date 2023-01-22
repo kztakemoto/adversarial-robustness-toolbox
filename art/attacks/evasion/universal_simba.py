@@ -26,6 +26,7 @@ from typing import Union, TYPE_CHECKING
 
 import numpy as np
 from scipy.fftpack import dct, idct
+from scipy.special import softmax
 
 from art.config import ART_NUMPY_DTYPE
 from art.attacks.attack import EvasionAttack
@@ -33,6 +34,7 @@ from art.estimators.estimator import BaseEstimator
 from art.estimators.classification.classifier import ClassifierMixin
 from art.utils import compute_success
 from art.utils import projection
+from art.utils import is_probability
 
 if TYPE_CHECKING:
     from art.utils import CLASSIFIER_TYPE
@@ -128,6 +130,16 @@ class Universal_SimBA(EvasionAttack):
         nb_instances = x.shape[0]
         preds = self.estimator.predict(x, batch_size=self.batch_size)
 
+        use_logit = False
+        if not is_probability(preds[0]):
+            logger.info(
+                "This attack requires an estimator predicting prpbabilities. It looks like the current "
+                "estimator is not predicting prpbabilities. "
+                "Convert the model outputs into predicting prpbabilities using softmax."
+            )
+            preds = softmax(preds, axis=1)
+            use_logit = True
+
         if y is None:
             if self.targeted:
                 raise ValueError('Target labels `y` need to be provided for targeted attacks.')
@@ -191,6 +203,8 @@ class Universal_SimBA(EvasionAttack):
                 left_noise = projection(left_noise, self.eps, self.norm)
 
             left_preds = self.estimator.predict(np.clip(x + left_noise, clip_min, clip_max), batch_size=self.batch_size)
+            if use_logit:
+                left_preds = softmax(left_preds, axis=1)
             left_probs = left_preds[(range(nb_instances), desired_labels)]
 
             if self.attack == 'dct':
@@ -201,6 +215,8 @@ class Universal_SimBA(EvasionAttack):
                 right_noise = projection(right_noise, self.eps, self.norm)
 
             right_preds = self.estimator.predict(np.clip(x + right_noise, clip_min, clip_max), batch_size=self.batch_size)
+            if use_logit:
+                right_preds = softmax(right_preds, axis=1)
             right_probs = right_preds[(range(nb_instances), desired_labels)]
 
             # use Use (2 * int(self.targeted) - 1) to shorten code?

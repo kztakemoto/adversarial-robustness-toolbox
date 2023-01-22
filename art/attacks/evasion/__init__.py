@@ -83,3 +83,4 @@ from art.attacks.evasion.projected_gradient_descent.smoothed_projected_gradient_
     SmoothedProjectedGradientDescentTensorFlowV2,
 )
 from art.attacks.evasion.smoothed_iterative_method import SmoothedBasicIterativeMethod
+from art.attacks.evasion.simba_logit import SimBA_logit
