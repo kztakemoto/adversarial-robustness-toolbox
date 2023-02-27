@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class TargetedDeepFool_simple(EvasionAttack):
+class TargetedDeepFool(EvasionAttack):
     """
     Implementation of the attack from Moosavi-Dezfooli et al. (2015).
 
@@ -120,7 +120,7 @@ class TargetedDeepFool_simple(EvasionAttack):
 
         # Compute perturbation with implicit batching
         for batch_id in trange(
-            int(np.ceil(x_adv.shape[0] / float(self.batch_size))), desc="TargetedDeepFool_simple", disable=not self.verbose
+            int(np.ceil(x_adv.shape[0] / float(self.batch_size))), desc="TargetedDeepFool", disable=not self.verbose
         ):
             batch_index_1, batch_index_2 = batch_id * self.batch_size, (batch_id + 1) * self.batch_size
             batch = x_adv[batch_index_1:batch_index_2].copy()
