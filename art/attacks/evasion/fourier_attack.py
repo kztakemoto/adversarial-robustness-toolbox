@@ -32,7 +32,6 @@ from art.attacks.attack import EvasionAttack
 from art.estimators.estimator import BaseEstimator, NeuralNetworkMixin
 from art.estimators.classification.classifier import ClassifierMixin
 from art.config import ART_NUMPY_DTYPE
-from art.utils import projection
 
 if TYPE_CHECKING:
     from art.utils import CLASSIFIER_TYPE
