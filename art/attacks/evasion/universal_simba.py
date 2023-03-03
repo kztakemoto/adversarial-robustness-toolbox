@@ -16,8 +16,9 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 """
-This module implements the black-box universal attack `simba`.
+This module implements the universal attack-version of `SimBA`.
 
+| Paper link: https://www.mdpi.com/1999-4893/15/5/144
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -30,7 +31,7 @@ from scipy.special import softmax
 
 from art.config import ART_NUMPY_DTYPE
 from art.attacks.attack import EvasionAttack
-from art.estimators.estimator import BaseEstimator
+from art.estimators.estimator import BaseEstimator, NeuralNetworkMixin
 from art.estimators.classification.classifier import ClassifierMixin
 from art.utils import compute_success
 from art.utils import projection
@@ -56,7 +57,7 @@ class Universal_SimBA(EvasionAttack):
         'norm',
         'batch_size',
     ]
-    _estimator_requirements = (BaseEstimator, ClassifierMixin)
+    _estimator_requirements = (BaseEstimator, ClassifierMixin, NeuralNetworkMixin)
 
     def __init__(
         self,
@@ -101,7 +102,7 @@ class Universal_SimBA(EvasionAttack):
         :param batch_size: Internal size of batches for prediction.
         :type batch_size: `int`
         """
-        super(Universal_SimBA, self).__init__(estimator=classifier)
+        super().__init__(estimator=classifier)
         self.attack = attack
         self.max_iter = max_iter
         self.epsilon = epsilon

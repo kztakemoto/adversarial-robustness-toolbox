@@ -29,7 +29,7 @@ import numpy as np
 from scipy.fft import ifftn
 
 from art.attacks.attack import EvasionAttack
-from art.estimators.estimator import BaseEstimator
+from art.estimators.estimator import BaseEstimator, NeuralNetworkMixin
 from art.estimators.classification.classifier import ClassifierMixin
 from art.config import ART_NUMPY_DTYPE
 from art.utils import projection
@@ -42,37 +42,37 @@ logger = logging.getLogger(__name__)
 
 class FourierAttack(EvasionAttack):
     attack_params = EvasionAttack.attack_params + [
-        'epsilon',
-        'block_size',
         'eps',
-        'norm',
+        'block_size',
+        'targeted',
         'batch_size',
     ]
-    _estimator_requirements = (BaseEstimator, ClassifierMixin)
+    _estimator_requirements = (BaseEstimator, ClassifierMixin, NeuralNetworkMixin)
 
     def __init__(
         self,
         classifier: "CLASSIFIER_TYPE",
-        epsilon: float = 20.0,
+        eps: float = 0.2,
         block_size: int = 4,
-        eps: float = 0.1,
-        norm: Union[int, float, str] = np.inf,
+        targeted: bool = False,
         batch_size: int = 1,
     ):
         """
         Create a single Fourier attack instance.
 
-        :param epsilon: overshoot parameter
+        :param classifier: A trained classifier.
+        :type classifier: :class:`.Classifier`
+        :param eps: attack step size
+        :type eps: `float`
         :param block_size: block size for Fourier attacks.
-        :param eps: noise size
+        :type block_size: `int`
         :param batch_size: Internal size of batches for prediction.
-        :param norm: The norm of the adversarial perturbation. Possible values: "inf", np.inf, 2
+        :type batch_size: `int`
         """
-        super(FourierAttack, self).__init__(estimator=classifier)
-        self.epsilon = epsilon
-        self.block_size = block_size
+        super().__init__(estimator=classifier)
         self.eps = eps
-        self.norm = norm
+        self.block_size = block_size
+        self.targeted = targeted
         self.batch_size = batch_size
         self._check_params()
 
@@ -107,20 +107,20 @@ class FourierAttack(EvasionAttack):
         noise = np.zeros((1, nb_xdim, nb_ydim, nb_channels))
         if self.estimator.channels_first:
             noise = noise.transpose(0, 3, 1, 2)
-        fooling_rate = 0.0
-        max_fooling_rate = 0.0
+        success_rate = 0.0
+        max_success_rate = 0.0
         nb_instances = len(x)
 
-        # get the labels
         if y is None:
-            # use the predicted labels
-            logger.info("Using model predictions as the correct labels.")
-            pred_y = self.estimator.predict(x, batch_size=self.batch_size)
+            if self.targeted:
+                raise ValueError('Target labels `y` need to be provided for targeted attacks.')
+            else:
+                # Use model predictions as correct outputs
+                logger.info('Using the model predictions as the correct labels.')
+                preds = self.estimator.predict(x, batch_size=self.batch_size)
+                y_i = np.argmax(preds, axis=1)
         else:
-            # use the actual labels
-            pred_y = y
-        
-        correct_y_max = np.argmax(pred_y, axis=1)
+            y_i = np.argmax(y, axis=1)
 
         nb_blocks = int(nb_xdim / self.block_size)
         for i in range(nb_blocks):
@@ -141,10 +141,9 @@ class FourierAttack(EvasionAttack):
                 # generate noise
                 tmp_noise = np.zeros((1, nb_xdim, nb_ydim, nb_channels))
                 for c in range(nb_channels):
-                    tmp_noise[:, :, :, c] = tmp_noise[:, :, :, c] + self.epsilon * uap_sfa
+                    tmp_noise[:, :, :, c] = tmp_noise[:, :, :, c] + self.eps * np.sign(uap_sfa)
                 
-                # projection
-                tmp_noise = projection(tmp_noise, self.eps, self.norm)
+                #tmp_noise = projection(tmp_noise, self.eps, np.inf)
                 if self.estimator.channels_first:
                     tmp_noise = tmp_noise.transpose(0, 3, 1, 2)
 
@@ -153,20 +152,28 @@ class FourierAttack(EvasionAttack):
                 if self.estimator.clip_values is not None:
                     x_adv = np.clip(x_adv, clip_min, clip_max)
 
-                # Compute the fooling rate
+                # prediction
                 y_adv = np.argmax(self.estimator.predict(x_adv, batch_size=self.batch_size), axis=1)
-                fooling_rate = np.sum(correct_y_max != y_adv) / nb_instances
 
-                if max_fooling_rate < fooling_rate:
-                    max_fooling_rate = fooling_rate
+                # Compute the error rate
+                if self.targeted:
+                    success_rate = np.sum(y_i == y_adv) / nb_instances
+                else:
+                    success_rate = np.sum(y_i != y_adv) / nb_instances
+
+                if max_success_rate < success_rate:
+                    max_success_rate = success_rate
                     noise = tmp_noise
 
-            val_norm = np.linalg.norm(noise.flatten(), ord=self.norm)
-            logger.info('Success rate of Fourier attack at section %d: %.2f%% (L%s norm of noise: %.2f)', i, 100 * max_fooling_rate, str(self.norm), val_norm)
+            val_norm = np.linalg.norm(noise.flatten(), ord=np.inf)
+            if self.targeted:
+                logger.info('Success rate of targeted Fourier attack at section %d: %.2f%% (L%s norm of noise: %.2f)', i, 100 * max_success_rate, 'inf', val_norm)
+            else:
+                logger.info('Success rate of non-targeted Fourier attack at section %d: %.2f%% (L%s norm of noise: %.2f)', i, 100 * max_success_rate, 'inf', val_norm)
 
-        self.fooling_rate = max_fooling_rate
+        self.success_rate = max_success_rate
         self.noise = noise
-        logger.info("Final success rate of Fourier attack: %.2f%%", 100 * max_fooling_rate)
+        logger.info("Final success rate of Fourier attack: %.2f%%", 100 * max_success_rate)
 
         # generate adversarial examples
         x_adv = x + noise
@@ -177,10 +184,6 @@ class FourierAttack(EvasionAttack):
 
 
     def _check_params(self) -> None:
-
-        if self.epsilon < 0:
-            raise ValueError("The overshoot parameter must not be negative.")
-
         if self.block_size <= 0:
             raise ValueError('The block size `block_size` has to be positive.')
 
