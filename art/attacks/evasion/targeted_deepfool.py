@@ -18,7 +18,7 @@
 """
 This module implements the targeted attack version of the white-box attack `DeepFool`.
 
-| Paper link: https://arxiv.org/abs/1511.04599
+| Paper link: https://ieeexplore.ieee.org/document/9840784
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
