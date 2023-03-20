@@ -142,7 +142,6 @@ class FourierAttack(EvasionAttack):
                 for c in range(nb_channels):
                     tmp_noise[:, :, :, c] = tmp_noise[:, :, :, c] + self.eps * np.sign(uap_sfa)
                 
-                #tmp_noise = projection(tmp_noise, self.eps, np.inf)
                 if self.estimator.channels_first:
                     tmp_noise = tmp_noise.transpose(0, 3, 1, 2)
 
