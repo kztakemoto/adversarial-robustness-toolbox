@@ -72,7 +72,6 @@ class PrincipleUAP(EvasionAttack):
         estimator: "CLASSIFIER_LOSS_GRADIENTS_TYPE",
         norm: Union[int, float, str] = np.inf,
         eps: Union[int, float, np.ndarray] = 0.3,
-        eps_step: Union[int, float, np.ndarray] = 0.1,
         targeted: bool = False,
         max_iter: int = 5,
         batch_size: int = 32,
