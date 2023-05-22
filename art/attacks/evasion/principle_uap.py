@@ -78,7 +78,7 @@ class PrincipleUAP(EvasionAttack):
         summary_writer: Union[str, bool, SummaryWriter] = False,
     ) -> None:
         """
-        Create a :class:`.PrincipleUAP` instance.
+        Create a :class:`PrincipleUAP` instance.
 
         :param estimator: A trained classifier.
         :param norm: The norm of the adversarial perturbation. Possible values: "inf", np.inf or 2.
