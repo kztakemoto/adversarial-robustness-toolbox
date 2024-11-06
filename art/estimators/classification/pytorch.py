@@ -18,14 +18,14 @@
 """
 This module implements the classifier `PyTorchClassifier` for PyTorch models.
 """
-# pylint: disable=C0302,R0904
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals, annotations
 
 import copy
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from tqdm.auto import tqdm
 
 import numpy as np
 import six
@@ -39,7 +39,7 @@ from art.estimators.pytorch import PyTorchEstimator
 from art.utils import check_and_transform_label_format
 
 if TYPE_CHECKING:
-    # pylint: disable=C0412, C0302
+
     import torch
 
     from art.utils import CLIP_VALUES_TYPE, PREPROCESSING_TYPE
@@ -72,16 +72,16 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         self,
         model: "torch.nn.Module",
         loss: "torch.nn.modules.loss._Loss",
-        input_shape: Tuple[int, ...],
+        input_shape: tuple[int, ...],
         nb_classes: int,
-        optimizer: Optional["torch.optim.Optimizer"] = None,  # type: ignore
+        optimizer: "torch.optim.Optimizer" | None = None,  # type: ignore
         use_amp: bool = False,
         opt_level: str = "O1",
-        loss_scale: Optional[Union[float, str]] = "dynamic",
+        loss_scale: float | str | None = "dynamic",
         channels_first: bool = True,
-        clip_values: Optional["CLIP_VALUES_TYPE"] = None,
-        preprocessing_defences: Union["Preprocessor", List["Preprocessor"], None] = None,
-        postprocessing_defences: Union["Postprocessor", List["Postprocessor"], None] = None,
+        clip_values: "CLIP_VALUES_TYPE" | None = None,
+        preprocessing_defences: "Preprocessor" | list["Preprocessor"] | None = None,
+        postprocessing_defences: "Postprocessor" | list["Postprocessor"] | None = None,
         preprocessing: "PREPROCESSING_TYPE" = (0.0, 1.0),
         device_type: str = "gpu",
     ) -> None:
@@ -132,7 +132,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         self._loss = loss
         self._optimizer = optimizer
         self._use_amp = use_amp
-        self._learning_phase: Optional[bool] = None
+        self._learning_phase: bool | None = None
         self._opt_level = opt_level
         self._loss_scale = loss_scale
 
@@ -141,7 +141,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         self.is_rnn = any((isinstance(m, torch.nn.modules.RNNBase) for m in self._model.modules()))
 
         # Get the internal layers
-        self._layer_names: List[str] = self._model.get_layers  # type: ignore
+        self._layer_names: list[str] = self._model.get_layers  # type: ignore
 
         self._model.to(self._device)
 
@@ -167,7 +167,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         # Setup for AMP use
         if self._use_amp:  # pragma: no cover
-            from apex import amp  # pylint: disable=E0611
+            from apex import amp
 
             if self._optimizer is None:
                 logger.warning(
@@ -203,10 +203,10 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
     @property
     def model(self) -> "torch.nn.Module":
-        return self._model._model  # pylint: disable=W0212
+        return self._model._model
 
     @property
-    def input_shape(self) -> Tuple[int, ...]:
+    def input_shape(self) -> tuple[int, ...]:
         """
         Return the shape of one input sample.
 
@@ -252,7 +252,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         return self._opt_level  # type: ignore
 
     @property
-    def loss_scale(self) -> Union[float, str]:
+    def loss_scale(self) -> float | str:
         """
         Return the loss scaling value.
 
@@ -261,11 +261,11 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         """
         return self._loss_scale  # type: ignore
 
-    def reduce_labels(self, y: Union[np.ndarray, "torch.Tensor"]) -> Union[np.ndarray, "torch.Tensor"]:
+    def reduce_labels(self, y: np.ndarray | "torch.Tensor") -> np.ndarray | "torch.Tensor":
         """
         Reduce labels from one-hot encoded to index labels.
         """
-        # pylint: disable=R0911
+
         import torch
 
         # Check if the loss function supports probability labels and probability labels are provided
@@ -296,15 +296,13 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
             return y.float()
         return y.astype(np.float32)
 
-    def predict(  # pylint: disable=W0221
-        self, x: np.ndarray, batch_size: int = 128, training_mode: bool = False, **kwargs
-    ) -> np.ndarray:
+    def predict(self, x: np.ndarray, batch_size: int = 128, training_mode: bool = False, **kwargs) -> np.ndarray:
         """
         Perform prediction for a batch of inputs.
 
         :param x: Input samples.
         :param batch_size: Size of batches.
-        :param training_mode: `True` for model set to training mode and `'False` for model set to evaluation mode.
+        :param training_mode: `True` for model set to training mode and `False` for model set to evaluation mode.
         :return: Array of predictions of shape `(nb_inputs, nb_classes)`.
         """
         import torch
@@ -344,8 +342,8 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         return predictions
 
     def _predict_framework(
-        self, x: "torch.Tensor", y: Optional["torch.Tensor"] = None
-    ) -> Tuple["torch.Tensor", Optional["torch.Tensor"]]:
+        self, x: "torch.Tensor", y: "torch.Tensor" | None = None
+    ) -> tuple["torch.Tensor", "torch.Tensor" | None]:
         """
         Perform prediction for a batch of inputs.
 
@@ -365,7 +363,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         return output, y_preprocessed
 
-    def fit(  # pylint: disable=W0221
+    def fit(
         self,
         x: np.ndarray,
         y: np.ndarray,
@@ -373,7 +371,8 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         nb_epochs: int = 10,
         training_mode: bool = True,
         drop_last: bool = False,
-        scheduler: Optional["torch.optim.lr_scheduler._LRScheduler"] = None,
+        scheduler: "torch.optim.lr_scheduler._LRScheduler" | None = None,
+        verbose: bool = False,
         **kwargs,
     ) -> None:
         """
@@ -384,11 +383,12 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                   shape (nb_samples,).
         :param batch_size: Size of batches.
         :param nb_epochs: Number of epochs to use for training.
-        :param training_mode: `True` for model set to training mode and `'False` for model set to evaluation mode.
+        :param training_mode: `True` for model set to training mode and `False` for model set to evaluation mode.
         :param drop_last: Set to ``True`` to drop the last incomplete batch, if the dataset size is not divisible by
                           the batch size. If ``False`` and the size of dataset is not divisible by the batch size, then
                           the last batch will be smaller. (default: ``False``)
         :param scheduler: Learning rate scheduler to run at the start of every epoch.
+        :param verbose: Display training progress bar.
         :param kwargs: Dictionary of framework-specific arguments. This parameter is not currently supported for PyTorch
                        and providing it takes no effect.
         """
@@ -416,7 +416,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, drop_last=drop_last)
 
         # Start training
-        for _ in range(nb_epochs):
+        for _ in tqdm(range(nb_epochs), disable=not verbose, desc="Epochs"):
             for x_batch, y_batch in dataloader:
                 # Move inputs to device
                 x_batch = x_batch.to(self._device)
@@ -441,7 +441,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
                 # Do training
                 if self._use_amp:  # pragma: no cover
-                    from apex import amp  # pylint: disable=E0611
+                    from apex import amp
 
                     with amp.scale_loss(loss, self._optimizer) as scaled_loss:
                         scaled_loss.backward()
@@ -453,14 +453,15 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
             if scheduler is not None:
                 scheduler.step()
 
-    def fit_generator(self, generator: "DataGenerator", nb_epochs: int = 20, **kwargs) -> None:
+    def fit_generator(self, generator: "DataGenerator", nb_epochs: int = 20, verbose: bool = False, **kwargs) -> None:
         """
         Fit the classifier using the generator that yields batches as specified.
 
         :param generator: Batch generator providing `(x, y)` for each epoch.
         :param nb_epochs: Number of epochs to use for training.
+        :param verbose: Display the training progress bar.
         :param kwargs: Dictionary of framework-specific arguments. This parameter is not currently supported for PyTorch
-               and providing it takes no effect.
+                       and providing it takes no effect.
         """
         import torch
         from art.data_generators import PyTorchDataGenerator
@@ -485,7 +486,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                 == (0, 1)
             )
         ):
-            for _ in range(nb_epochs):
+            for _ in tqdm(range(nb_epochs), disable=not verbose, desc="Epochs"):
                 for i_batch, o_batch in generator.iterator:
                     if isinstance(i_batch, np.ndarray):
                         i_batch = torch.from_numpy(i_batch).to(self._device)
@@ -508,7 +509,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
                     # Do training
                     if self._use_amp:  # pragma: no cover
-                        from apex import amp  # pylint: disable=E0611
+                        from apex import amp
 
                         with amp.scale_loss(loss, self._optimizer) as scaled_loss:
                             scaled_loss.backward()
@@ -560,8 +561,12 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         self.model.apply(weight_reset)
 
-    def class_gradient(  # pylint: disable=W0221
-        self, x: np.ndarray, label: Union[int, List[int], None] = None, training_mode: bool = False, **kwargs
+    def class_gradient(
+        self,
+        x: np.ndarray,
+        label: int | list[int] | np.ndarray | None = None,
+        training_mode: bool = False,
+        **kwargs,
     ) -> np.ndarray:
         """
         Compute per-class derivatives w.r.t. `x`.
@@ -571,7 +576,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                       output is computed for all samples. If multiple values as provided, the first dimension should
                       match the batch size of `x`, and each value will be used as target for its corresponding sample in
                       `x`. If `None`, then gradients for all classes will be computed for each sample.
-        :param training_mode: `True` for model set to training mode and `'False` for model set to evaluation mode.
+        :param training_mode: `True` for model set to training mode and `False` for model set to evaluation mode.
                               Note on RNN-like models: Backpropagation through RNN modules in eval mode raises
                               RuntimeError due to cudnn issues and require training mode, i.e. RuntimeError: cudnn RNN
                               backward can only be called in training mode. Therefore, if the model is an RNN type we
@@ -598,6 +603,8 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                 self.set_batchnorm(train=False)
                 self.set_dropout(train=False)
 
+        if isinstance(label, list):
+            label = np.array(label)
         if not (
             (label is None)
             or (isinstance(label, (int, np.integer)) and label in range(self.nb_classes))
@@ -691,13 +698,13 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         return grads
 
-    def compute_loss(  # type: ignore # pylint: disable=W0221
+    def compute_loss(  # type: ignore
         self,
-        x: Union[np.ndarray, "torch.Tensor"],
-        y: Union[np.ndarray, "torch.Tensor"],
+        x: np.ndarray | "torch.Tensor",
+        y: np.ndarray | "torch.Tensor",
         reduction: str = "none",
         **kwargs,
-    ) -> Union[np.ndarray, "torch.Tensor"]:
+    ) -> np.ndarray | "torch.Tensor":
         """
         Compute the loss.
 
@@ -747,10 +754,10 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
     def compute_losses(
         self,
-        x: Union[np.ndarray, "torch.Tensor"],
-        y: Union[np.ndarray, "torch.Tensor"],
+        x: np.ndarray | "torch.Tensor",
+        y: np.ndarray | "torch.Tensor",
         reduction: str = "none",
-    ) -> Dict[str, Union[np.ndarray, "torch.Tensor"]]:
+    ) -> dict[str, np.ndarray | "torch.Tensor"]:
         """
         Compute all loss components.
 
@@ -765,20 +772,20 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         """
         return {"total": self.compute_loss(x=x, y=y, reduction=reduction)}
 
-    def loss_gradient(  # pylint: disable=W0221
+    def loss_gradient(
         self,
-        x: Union[np.ndarray, "torch.Tensor"],
-        y: Union[np.ndarray, "torch.Tensor"],
+        x: np.ndarray | "torch.Tensor",
+        y: np.ndarray | "torch.Tensor",
         training_mode: bool = False,
         **kwargs,
-    ) -> Union[np.ndarray, "torch.Tensor"]:
+    ) -> np.ndarray | "torch.Tensor":
         """
         Compute the gradient of the loss function w.r.t. `x`.
 
         :param x: Sample input with shape as expected by the model.
         :param y: Target values (class labels) one-hot-encoded of shape `(nb_samples, nb_classes)` or indices of shape
                   `(nb_samples,)`.
-        :param training_mode: `True` for model set to training mode and `'False` for model set to evaluation mode.
+        :param training_mode: `True` for model set to training mode and `False` for model set to evaluation mode.
                               Note on RNN-like models: Backpropagation through RNN modules in eval mode raises
                               RuntimeError due to cudnn issues and require training mode, i.e. RuntimeError: cudnn RNN
                               backward can only be called in training mode. Therefore, if the model is an RNN type we
@@ -840,7 +847,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         # Compute gradients
         if self._use_amp:  # pragma: no cover
-            from apex import amp  # pylint: disable=E0611
+            from apex import amp
 
             with amp.scale_loss(loss, self._optimizer) as scaled_loss:
                 scaled_loss.backward()
@@ -863,21 +870,21 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         return grads
 
-    def custom_loss_gradient(  # pylint: disable=W0221
+    def custom_loss_gradient(
         self,
         loss_fn,
-        x: Union[np.ndarray, "torch.Tensor"],
-        y: Union[np.ndarray, "torch.Tensor"],
+        x: np.ndarray | "torch.Tensor",
+        y: np.ndarray | "torch.Tensor",
         layer_name,
         training_mode: bool = False,
-    ) -> Union[np.ndarray, "torch.Tensor"]:
+    ) -> np.ndarray | "torch.Tensor":
         """
         Compute the gradient of the loss function w.r.t. `x`.
 
-        :loss_fn: Loss function w.r.t to which gradient needs to be calculated.
+        :param loss_fn: Loss function w.r.t to which gradient needs to be calculated.
         :param x: Sample input with shape as expected by the model(base image).
         :param y: Sample input with shape as expected by the model(target image).
-        :param training_mode: `True` for model set to training mode and `'False` for model set to evaluation mode.`
+        :param training_mode: `True` for model set to training mode and `False` for model set to evaluation mode.`
         :param layer_name: Name of the layer from which activation needs to be extracted/activation layer.
         :return: Array of gradients of the same shape as `x`.
         """
@@ -920,7 +927,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         # Compute gradients
         if self._use_amp:  # pragma: no cover
-            from apex import amp  # pylint: disable=E0611
+            from apex import amp
 
             with amp.scale_loss(loss, self._optimizer) as scaled_loss:
                 scaled_loss.backward()
@@ -942,11 +949,11 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
     def get_activations(  # type: ignore
         self,
-        x: Union[np.ndarray, "torch.Tensor"],
-        layer: Optional[Union[int, str]] = None,
+        x: np.ndarray | "torch.Tensor",
+        layer: int | str | None = None,
         batch_size: int = 128,
         framework: bool = False,
-    ) -> Union[np.ndarray, "torch.Tensor"]:
+    ) -> np.ndarray | "torch.Tensor":
         """
         Return the output of the specified layer for input `x`. `layer` is specified by layer index (between 0 and
         `nb_layers - 1`) or by name. The number of layers can be determined by counting the results returned by
@@ -983,19 +990,17 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         def get_feature(name):
             # the hook signature
-            def hook(model, input, output):  # pylint: disable=W0622,W0613
+            def hook(model, input, output):  # pylint: disable=redefined-builtin,unused-argument
                 self._features[name] = output
 
             return hook
 
         if not hasattr(self, "_features"):
-            self._features: Dict[str, torch.Tensor] = {}
+            self._features: dict[str, torch.Tensor] = {}
             # register forward hooks on the layers of choice
 
         if layer not in self._features:
-            interim_layer = dict([*self._model._model.named_modules()])[  # pylint: disable=W0212,W0622,W0613
-                self._layer_names[layer_index]
-            ]
+            interim_layer = dict([*self._model._model.named_modules()])[self._layer_names[layer_index]]
             interim_layer.register_forward_hook(get_feature(self._layer_names[layer_index]))
 
         if framework:
@@ -1004,7 +1009,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                 return self._features[self._layer_names[layer_index]]
             input_tensor = torch.from_numpy(x_preprocessed)
             self._model(input_tensor.to(self._device))
-            return self._features[self._layer_names[layer_index]]  # pylint: disable=W0212
+            return self._features[self._layer_names[layer_index]]
 
         # Run prediction with batch processing
         results = []
@@ -1019,14 +1024,14 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
             # Run prediction for the current batch
             self._model(torch.from_numpy(x_preprocessed[begin:end]).to(self._device))
-            layer_output = self._features[self._layer_names[layer_index]]  # pylint: disable=W0212
+            layer_output = self._features[self._layer_names[layer_index]]
             results.append(layer_output.detach().cpu().numpy())
 
         results_array = np.concatenate(results)
 
         return results_array
 
-    def save(self, filename: str, path: Optional[str] = None) -> None:
+    def save(self, filename: str, path: str | None = None) -> None:
         """
         Save a model to file in the format specific to the backend framework.
 
@@ -1044,20 +1049,20 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        # pylint: disable=W0212
         # disable pylint because access to _modules required
         torch.save(self._model._model.state_dict(), full_path + ".model")
-        torch.save(self._optimizer.state_dict(), full_path + ".optimizer")  # type: ignore
+        if self._optimizer is not None:
+            torch.save(self._optimizer.state_dict(), full_path + ".optimizer")  # type: ignore
+            logger.info("Optimizer state dict saved in path: %s.", full_path + ".optimizer")
         logger.info("Model state dict saved in path: %s.", full_path + ".model")
-        logger.info("Optimizer state dict saved in path: %s.", full_path + ".optimizer")
 
-    def __getstate__(self) -> Dict[str, Any]:
+    def __getstate__(self) -> dict[str, Any]:
         """
         Use to ensure `PyTorchClassifier` can be pickled.
 
         :return: State dictionary with instance parameters.
         """
-        # pylint: disable=W0212
+
         # disable pylint because access to _model required
         state = self.__dict__.copy()
         state["inner_model"] = copy.copy(state["_model"]._model)
@@ -1073,7 +1078,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
         return state
 
-    def __setstate__(self, state: Dict[str, Any]) -> None:
+    def __setstate__(self, state: dict[str, Any]) -> None:
         """
         Use to ensure `PyTorchClassifier` can be unpickled.
 
@@ -1094,7 +1099,8 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
         self._model.to(self._device)
 
         # Recover optimizer
-        self._optimizer.load_state_dict(torch.load(str(full_path) + ".optimizer"))  # type: ignore
+        if os.path.isfile(str(full_path) + ".optimizer"):
+            self._optimizer.load_state_dict(torch.load(str(full_path) + ".optimizer"))  # type: ignore
 
         self.__dict__.pop("model_name", None)
         self.__dict__.pop("inner_model", None)
@@ -1134,7 +1140,6 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                         super().__init__()
                         self._model = model
 
-                    # pylint: disable=W0221
                     # disable pylint because of API requirements for function
                     def forward(self, x):
                         """
@@ -1145,7 +1150,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                         :return: a list of output layers, where the last 2 layers are logit and final outputs.
                         :rtype: `list`
                         """
-                        # pylint: disable=W0212
+
                         # disable pylint because access to _model required
 
                         result = []
@@ -1164,7 +1169,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
                         return result
 
                     @property
-                    def get_layers(self) -> List[str]:
+                    def get_layers(self) -> list[str]:
                         """
                         Return the hidden layers in the model, if applicable.
 
@@ -1181,7 +1186,7 @@ class PyTorchClassifier(ClassGradientsMixin, ClassifierMixin, PyTorchEstimator):
 
                         result = []
                         if isinstance(self._model, torch.nn.Module):
-                            for name, _ in self._model._modules.items():  # pylint: disable=W0212
+                            for name, _ in self._model._modules.items():
                                 result.append(name)
 
                         else:  # pragma: no cover

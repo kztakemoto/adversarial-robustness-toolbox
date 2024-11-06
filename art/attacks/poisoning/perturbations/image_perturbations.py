@@ -18,7 +18,7 @@
 """
 Adversarial perturbations designed to work for images.
 """
-from typing import Optional, Tuple
+from __future__ import annotations
 
 import numpy as np
 
@@ -49,7 +49,7 @@ def add_single_bd(x: np.ndarray, distance: int = 2, pixel_value: int = 1) -> np.
     return x
 
 
-def add_pattern_bd(x: np.ndarray, distance: int = 2, pixel_value: int = 1) -> np.ndarray:
+def add_pattern_bd(x: np.ndarray, distance: int = 2, pixel_value: int = 1, channels_first: bool = False) -> np.ndarray:
     """
     Augments a matrix by setting a checkerboard-like pattern of values some `distance` away from the bottom-right
     edge to 1. Works for single images or a batch of images.
@@ -57,10 +57,21 @@ def add_pattern_bd(x: np.ndarray, distance: int = 2, pixel_value: int = 1) -> np
     :param x: A single image or batch of images of shape NWHC, NHW, or HC. Pixels will be added to all channels.
     :param distance: Distance from bottom-right walls.
     :param pixel_value: Value used to replace the entries of the image matrix.
+    :param channels_first: If the data is provided in channels first format we transpose to NWHC or HC depending on
+                           input shape
     :return: Backdoored image.
     """
     x = np.copy(x)
+    original_dtype = x.dtype
     shape = x.shape
+    if channels_first:
+        if len(shape) == 4:
+            # Transpose the image putting channels last
+            x = np.transpose(x, (0, 2, 3, 1))
+        if len(shape) == 2:
+            # HC to CH
+            x = np.transpose(x)
+
     if len(shape) == 4:
         height, width = x.shape[1:3]
         x[:, height - distance, width - distance, :] = pixel_value
@@ -81,7 +92,15 @@ def add_pattern_bd(x: np.ndarray, distance: int = 2, pixel_value: int = 1) -> np
         x[height - distance - 2, width - distance] = pixel_value
     else:
         raise ValueError(f"Invalid array shape: {shape}")
-    return x
+
+    if channels_first:
+        if len(shape) == 4:
+            # Putting channels first again
+            x = np.transpose(x, (0, 3, 1, 2))
+        if len(shape) == 2:
+            x = np.transpose(x)
+
+    return x.astype(original_dtype)
 
 
 def insert_image(
@@ -91,7 +110,7 @@ def insert_image(
     random: bool = True,
     x_shift: int = 0,
     y_shift: int = 0,
-    size: Optional[Tuple[int, int]] = None,
+    size: tuple[int, int] | None = None,
     mode: str = "L",
     blend=0.8,
 ) -> np.ndarray:
@@ -102,7 +121,7 @@ def insert_image(
     :param x: A single image or batch of images of shape NHWC, NCHW, or HWC. Input is in range [0,1].
     :param backdoor_path: The path to the image to insert as a trigger.
     :param channels_first: Whether the channels axis is in the first or last dimension
-    :param random: Whether or not the image should be randomly placed somewhere on the image.
+    :param random: Whether the image should be randomly placed somewhere on the image.
     :param x_shift: Number of pixels from the left to shift the trigger (when not using random placement).
     :param y_shift: Number of pixels from the right to shift the trigger (when not using random placement).
     :param size: The size the trigger image should be (height, width). Default `None` if no resizing necessary.
