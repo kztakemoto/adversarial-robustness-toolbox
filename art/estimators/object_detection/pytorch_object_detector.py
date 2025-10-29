@@ -220,7 +220,7 @@ class PyTorchObjectDetector(ObjectDetectorMixin, PyTorchEstimator):
 
             if not self.channels_first:
                 x_tensor = torch.permute(x_tensor, (0, 3, 1, 2))
-            x_tensor = x_tensor / norm_factor
+            x_tensor = x_tensor / norm_factor  # type: ignore
 
             # Set gradients
             if not no_grad:
@@ -230,27 +230,29 @@ class PyTorchObjectDetector(ObjectDetectorMixin, PyTorchEstimator):
                     x_tensor.retain_grad()
 
             # Apply framework-specific preprocessing
-            x_preprocessed, y_preprocessed = self._apply_preprocessing(x=x_tensor, y=y_tensor, fit=fit, no_grad=no_grad)
+            x_preprocessed_tensor, y_preprocessed_tensor = self._apply_preprocessing(
+                x=x_tensor, y=y_tensor, fit=fit, no_grad=no_grad
+            )
 
         elif isinstance(x, np.ndarray):
             # Apply preprocessing
             x_preprocessed, y_preprocessed = self._apply_preprocessing(x=x, y=y, fit=fit, no_grad=no_grad)
 
             # Convert inputs into tensor
-            x_preprocessed, y_preprocessed = cast_inputs_to_pt(x_preprocessed, y_preprocessed)
+            x_preprocessed_tensor, y_preprocessed_tensor = cast_inputs_to_pt(x_preprocessed, y_preprocessed)
 
             if not self.channels_first:
-                x_preprocessed = torch.permute(x_preprocessed, (0, 3, 1, 2))
-            x_preprocessed = x_preprocessed / norm_factor
+                x_preprocessed_tensor = torch.permute(x_preprocessed_tensor, (0, 3, 1, 2))
+            x_preprocessed_tensor = x_preprocessed_tensor / torch.tensor(norm_factor, device=self.device)
 
             # Set gradients
             if not no_grad:
-                x_preprocessed.requires_grad = True
+                x_preprocessed_tensor.requires_grad = True
 
         else:
             raise NotImplementedError("Combination of inputs and preprocessing not supported.")
 
-        return x_preprocessed, y_preprocessed
+        return x_preprocessed_tensor, y_preprocessed_tensor
 
     def _translate_labels(self, labels: list[dict[str, "torch.Tensor"]]) -> Any:
         """
@@ -302,6 +304,7 @@ class PyTorchObjectDetector(ObjectDetectorMixin, PyTorchEstimator):
         self._model.train()
 
         self.set_dropout(False)
+        self.set_batchnorm(False)
         self.set_multihead_attention(False)
 
         # Apply preprocessing and convert to tensors
@@ -327,7 +330,7 @@ class PyTorchObjectDetector(ObjectDetectorMixin, PyTorchEstimator):
 
     def loss_gradient(
         self, x: np.ndarray | "torch.Tensor", y: list[dict[str, np.ndarray | "torch.Tensor"]], **kwargs
-    ) -> np.ndarray:
+    ) -> np.ndarray | "torch.Tensor":
         """
         Compute the gradient of the loss function w.r.t. `x`.
 
@@ -359,6 +362,8 @@ class PyTorchObjectDetector(ObjectDetectorMixin, PyTorchEstimator):
         # Compute gradients
         loss.backward(retain_graph=True)  # type: ignore
 
+        grads: torch.Tensor | np.ndarray
+
         if x_grad.grad is not None:
             if isinstance(x, np.ndarray):
                 grads = x_grad.grad.cpu().numpy()
@@ -376,7 +381,8 @@ class PyTorchObjectDetector(ObjectDetectorMixin, PyTorchEstimator):
         if not self.channels_first:
             if isinstance(x, np.ndarray):
                 grads = np.transpose(grads, (0, 2, 3, 1))
-            else:
+            elif isinstance(grads, torch.Tensor):
+                # grads_tensor: torch.Tensor = grads
                 grads = torch.permute(grads, (0, 2, 3, 1))
 
         assert grads.shape == x.shape

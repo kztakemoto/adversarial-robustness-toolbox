@@ -115,10 +115,7 @@ class AutoConjugateGradient(EvasionAttack):
             "cross_entropy", or "difference_logits_ratio"
         :param verbose: Show progress bars.
         """
-        from art.estimators.classification import TensorFlowClassifier, TensorFlowV2Classifier, PyTorchClassifier
-
-        if isinstance(estimator, TensorFlowClassifier):
-            raise ValueError("This attack does not support TensorFlow  v1.")
+        from art.estimators.classification import TensorFlowV2Classifier, PyTorchClassifier
 
         if loss_type not in self._predefined_losses:
             raise ValueError(
@@ -637,8 +634,8 @@ class AutoConjugateGradient(EvasionAttack):
         if not isinstance(self.batch_size, int) or self.batch_size <= 0:
             raise ValueError("The argument batch_size has to be of type int and larger than zero.")
 
-        # if self.loss_type not in self._predefined_losses:
-        #     raise ValueError("The argument loss_type has to be either {}.".format(self._predefined_losses))
+        if self.loss_type not in self._predefined_losses:
+            raise ValueError("The argument loss_type has to be either {}.".format(self._predefined_losses))
 
         if not isinstance(self.verbose, bool):
             raise ValueError("The argument `verbose` has to be of type bool.")

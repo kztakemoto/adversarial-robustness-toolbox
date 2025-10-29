@@ -40,7 +40,7 @@ def main_mnist_binary():
     model.add(Flatten())
     model.add(Dense(1, activation="sigmoid"))
 
-    model.compile(loss="binary_crossentropy", optimizer=tf.keras.optimizers.Adam(lr=0.01), metrics=["accuracy"])
+    model.compile(loss="binary_crossentropy", optimizer=tf.keras.optimizers.Adam(learning_rate=0.01), metrics=["accuracy"])
 
     (x_train, y_train), (_, _), _, _ = load_dataset("mnist")
 
@@ -87,7 +87,7 @@ def main_diabetes():
     model.add(Dense(10, activation="relu"))
     model.add(Dense(1))
 
-    model.compile(loss="mean_squared_error", optimizer=tf.keras.optimizers.Adam(lr=0.01), metrics=["accuracy"])
+    model.compile(loss="mean_squared_error", optimizer=tf.keras.optimizers.Adam(learning_rate=0.01), metrics=["accuracy"])
 
     (x_train, y_train), (_, _), _, _ = load_dataset("diabetes")
 
@@ -154,7 +154,7 @@ def create_scikit_model_weights():
                 os.path.join(
                     os.path.dirname(os.path.dirname(__file__)),
                     "resources/models/scikit/",
-                    "scikit-" + model_name + "-iris-clipped-eq-1.4.0.pickle",
+                    "scikit-" + model_name + "-iris-clipped-eq-1.6.1.pickle",
                 ),
                 "wb",
             ),
@@ -168,7 +168,7 @@ def create_scikit_model_weights():
                 os.path.join(
                     os.path.dirname(os.path.dirname(__file__)),
                     "resources/models/scikit/",
-                    "scikit-" + model_name + "-iris-unclipped-eq-1.4.0.pickle",
+                    "scikit-" + model_name + "-iris-unclipped-eq-1.6.1.pickle",
                 ),
                 "wb",
             ),
